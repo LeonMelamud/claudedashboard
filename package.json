@@ -1,0 +1,27 @@
+{
+  "name": "claude-code-insights",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "author": "Ziv Hundert",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zivhundert/claudedashboard.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"pnpm --filter @dash/server dev\" \"pnpm --filter @dash/web dev\"",
+    "dev:demo": "DEMO_MODE=1 pnpm run dev",
+    "build": "pnpm --filter @dash/shared build && pnpm --filter @dash/server build && pnpm --filter @dash/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
+    "seed": "pnpm --filter @dash/server seed",
+    "start": "node server/dist/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

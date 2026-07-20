@@ -1,0 +1,157 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "claude-code-insights.fullname" . }}
+  labels:
+    {{- include "claude-code-insights.labels" . | nindent 4 }}
+spec:
+  # NOT a value on purpose: SQLite is single-writer and the data disk is a
+  # ReadWriteOnce Azure Disk (cannot multi-attach). Running >1 replica would
+  # corrupt data / deadlock scheduling. Scale vertically via .resources.
+  replicas: 1
+  strategy:
+    # Recreate (not RollingUpdate): the old pod must release the RWO disk and
+    # the SQLite write lock before the new pod starts. Upgrades therefore
+    # incur a brief, intentional downtime window.
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "claude-code-insights.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "claude-code-insights.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        # The image (node:22-slim, no USER directive) starts as root by
+        # default, but nothing in the app needs root: it only writes to
+        # /app/data (the volume below). We run as the node image's built-in
+        # unprivileged user (uid/gid 1000) and let fsGroup make the mounted
+        # Azure Disk group-writable so SQLite can create/write its files.
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: app
+          image: {{ include "claude-code-insights.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DB_PATH
+              value: /app/data/dashboard.db
+            - name: DATA_SOURCE
+              value: {{ .Values.dataSource | quote }}
+            - name: PRIVACY_MODE
+              value: {{ .Values.privacyMode | quote }}
+            {{- with .Values.config.syncCron }}
+            - name: SYNC_CRON
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.syncTz }}
+            - name: SYNC_TZ
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.intradaySyncMinutes) "" }}
+            - name: INTRADAY_SYNC_MINUTES
+              value: {{ .Values.config.intradaySyncMinutes | quote }}
+            {{- end }}
+            {{- with .Values.config.backfillStart }}
+            - name: BACKFILL_START
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.backfillEmptyStreak) "" }}
+            - name: BACKFILL_EMPTY_STREAK
+              value: {{ .Values.config.backfillEmptyStreak | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.hourlyBackfillDays) "" }}
+            - name: HOURLY_BACKFILL_DAYS
+              value: {{ .Values.config.hourlyBackfillDays | quote }}
+            {{- end }}
+            {{- if include "claude-code-insights.hasSecret" . }}
+            # All keys optional: a secret carrying only some keys is valid —
+            # missing keys are skipped instead of blocking pod start.
+            - name: OTEL_INGEST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-code-insights.secretName" . }}
+                  key: otel-ingest-token
+                  optional: true
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-code-insights.secretName" . }}
+                  key: admin-api-key
+                  optional: true
+            - name: ENTERPRISE_ANALYTICS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-code-insights.secretName" . }}
+                  key: enterprise-analytics-key
+                  optional: true
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (include "claude-code-insights.fullname" .) .Values.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

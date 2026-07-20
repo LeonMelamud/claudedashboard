@@ -1,0 +1,35 @@
+# Security policy
+
+## Reporting a vulnerability
+
+Please **do not** open a public issue for security problems. Report privately via [GitHub Security Advisories](https://github.com/zivhundert/claude-code-insights/security/advisories/new) ("Report a vulnerability"). You'll get an acknowledgement as soon as possible, and a fix or mitigation plan before any public disclosure.
+
+## Deployment model — read this before exposing the dashboard
+
+**The dashboard has no authentication or authorization of its own.** Anyone who can reach the HTTP port can read every page (per-user usage, costs, emails) and use the Admin screens. This is by design for a small trusted team, and it means you must:
+
+- deploy inside a trusted network (VPN/private subnet), **or**
+- put it behind an authenticating reverse proxy (SSO/OAuth2 proxy), and
+- never expose the port to the public internet.
+
+## Telemetry ingest
+
+The OTLP receiver (`POST /otel/v1/logs`, `POST /otel/v1/metrics`) accepts pushes from developer machines.
+
+- **Set `OTEL_INGEST_TOKEN`** (e.g. `openssl rand -hex 32`) in the server's `.env` unless the server is only reachable from a trusted network. With it set, both endpoints require `Authorization: Bearer <token>` and reply 401 otherwise; developers add the matching `OTEL_EXPORTER_OTLP_HEADERS` entry (see [docs/telemetry-setup.md](docs/telemetry-setup.md)). The server logs a boot warning when running keyless telemetry mode without a token.
+- Ingest is defensive by construction: malformed payloads are skipped (never 500), and request bodies are SHA-256-deduped so replayed/retried batches don't double-count.
+
+## Privacy filter design
+
+Telemetry can contain sensitive detail (Bash command lines, file paths — and prompt text, if a client machine explicitly opts in). The server's stance:
+
+- **Drop at ingest, not at display.** Every record passes the privacy filter (`server/src/otel/privacy.ts`) *before any handler or table sees it*. What the policy drops is never stored anywhere.
+- **Policy as data.** The keep/drop/redact rules for each event type are a plain data object selected by `PRIVACY_MODE` (`minimal` / `balanced` / `full`), with a single interpreter function. There is no second code path to drift.
+- **Transparency endpoint.** `GET /api/telemetry-policy` serves the exact policy object the ingest path executes, and the web app renders it as the "What's collected" dialog — users see precisely what is collected, by construction.
+- The default (`balanced`) drops prompt text, commands, file paths and tool arguments. Prompt/response content is additionally redacted client-side by Claude Code's exporter unless a machine opts in — and only `PRIVACY_MODE=full` would store it.
+
+## Secrets handling
+
+- `ADMIN_API_KEY`, `ENTERPRISE_ANALYTICS_KEY`, and `OTEL_INGEST_TOKEN` live only in the server's `.env` (or your secret manager / `--env-file`). They are read server-side and **never reach the browser or any API response**.
+- `.env` and `.env.local` are gitignored (and dockerignored) — verify before committing config changes: `git check-ignore -v .env`. Commit only `.env.example`, which must never contain real values.
+- The SQLite database (`data/`, also gitignored) contains usage data and user emails — treat backups of it with the same care as the dashboard itself.

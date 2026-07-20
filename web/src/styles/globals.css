@@ -1,0 +1,192 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --card-edge: rgba(255, 255, 255, 0.9);
+  --border: #e2e8f0;
+  --fg: #0f172a;
+  --muted: #64748b;
+  --accent: #d97757;
+  --accent-2: #7c6aef;
+  --good: #059669;
+  --warn: #d97706;
+  --risk: #dc2626;
+  --tier-starter: #64748b;
+  --tier-explorer: #0284c7;
+  --tier-producer: #059669;
+  --tier-champion: #d97706;
+  --chart-1: #d97757;
+  --chart-2: #7c6aef;
+  --chart-3: #0ea5e9;
+  --chart-4: #10b981;
+  --chart-5: #f59e0b;
+  --chart-6: #ec4899;
+  --chart-7: #14b8a6;
+  --chart-8: #64748b;
+}
+
+.dark {
+  --bg: #0b0e14;
+  --card: #12161f;
+  --card-edge: rgba(255, 255, 255, 0.055);
+  --border: #232936;
+  --fg: #e7ebf3;
+  --muted: #8b93a7;
+  --accent: #d97757;
+  --accent-2: #8b7bf4;
+  --good: #34d399;
+  --warn: #fbbf24;
+  --risk: #f87171;
+  --tier-starter: #94a3b8;
+  --tier-explorer: #38bdf8;
+  --tier-producer: #34d399;
+  --tier-champion: #fbbf24;
+  --chart-1: #e08b6d;
+  --chart-2: #9486f4;
+  --chart-3: #38bdf8;
+  --chart-4: #34d399;
+  --chart-5: #fbbf24;
+  --chart-6: #f472b6;
+  --chart-7: #2dd4bf;
+  --chart-8: #7b8497;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent-2);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-risk: var(--risk);
+  --color-tier-starter: var(--tier-starter);
+  --color-tier-explorer: var(--tier-explorer);
+  --color-tier-producer: var(--tier-producer);
+  --color-tier-champion: var(--tier-champion);
+  --font-sans: "Inter", "Inter var", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Card with subtle top-edge highlight */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: inset 0 1px 0 var(--card-edge);
+}
+
+.hero-gradient {
+  background: linear-gradient(120deg, var(--accent) 10%, var(--accent-2) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.champion-glow {
+  box-shadow: 0 0 22px color-mix(in srgb, var(--tier-champion) 30%, transparent);
+}
+
+/* Skeleton shimmer */
+@keyframes dash-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--fg) 7%, transparent);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--fg) 7%, transparent),
+    transparent
+  );
+  animation: dash-shimmer 1.5s infinite;
+}
+
+/* Scrollbars in the spirit of the theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--fg) 20%, transparent) transparent;
+}
+
+/* Radix content pop animation */
+@keyframes dash-pop {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.pop-in {
+  animation: dash-pop 130ms ease-out;
+}
+
+@keyframes dash-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.sheet-in {
+  animation: dash-slide-in-right 200ms ease-out;
+}
+
+@keyframes dash-pulse-stripe {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 28px 0;
+  }
+}
+.progress-stripes {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--accent) 55%, transparent) 0 8px,
+    color-mix(in srgb, var(--accent) 30%, transparent) 8px 16px
+  );
+  background-size: 28px 28px;
+  animation: dash-pulse-stripe 0.9s linear infinite;
+}
+
+input[type="date"] {
+  color-scheme: light;
+}
+.dark input[type="date"] {
+  color-scheme: dark;
+}

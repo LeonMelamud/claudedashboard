@@ -1,0 +1,153 @@
+# ============================================================================
+# Claude Code Insights — Helm values
+#
+# This file is the operator UI: every knob you are expected to touch is here
+# and documented. The app is a single container (Fastify + SQLite) serving,
+# on ONE port:
+#   - the dashboard SPA
+#   - the /api backend (health at GET /api/health)
+#   - the telemetry receiver: POST /otel/v1/logs and POST /otel/v1/metrics
+#
+# IMPORTANT ARCHITECTURAL CONSTRAINT — read before "scaling":
+# SQLite is single-writer, so this chart deliberately runs EXACTLY ONE
+# replica (hardcoded in the Deployment, strategy Recreate) on ONE
+# ReadWriteOnce PVC. Scale vertically (resources below), never horizontally.
+# ============================================================================
+
+image:
+  # Repository is intentionally unqualified — set it to your registry, e.g.
+  #   --set image.repository=myregistry.azurecr.io/claude-code-insights
+  repository: claude-code-insights
+  # Empty tag defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# e.g. [{name: my-acr-pull-secret}] — not needed when the ACR is attached to
+# the AKS cluster (az aks update --attach-acr).
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ----------------------------------------------------------------------------
+# Data source & privacy
+# ----------------------------------------------------------------------------
+# Which upstream feeds the dashboard (env DATA_SOURCE):
+#   telemetry  (default) — keyless; dev machines push Claude Code OTel here
+#   console    — Console Admin API; requires secrets.adminApiKey
+#   enterprise — claude.ai Enterprise Analytics; requires secrets.enterpriseAnalyticsKey
+#   demo       — seeded synthetic data (not for production)
+dataSource: "telemetry"
+
+# How much detail the OTel receiver keeps (env PRIVACY_MODE):
+#   full | balanced | minimal   — see docs/telemetry-setup.md privacy tiers
+privacyMode: "balanced"
+
+# ----------------------------------------------------------------------------
+# App configuration (non-secret env). Empty string = use the app default.
+# ----------------------------------------------------------------------------
+config:
+  # Nightly full-sync cron, evaluated in syncTz (default "0 5 * * *").
+  syncCron: ""
+  # Timezone for syncCron (default "Asia/Jerusalem").
+  syncTz: ""
+  # Refresh the current UTC day every N minutes; 0 disables (default 60).
+  intradaySyncMinutes: ""
+  # Historical backfill start date YYYY-MM-DD; empty = auto-probe.
+  # Only meaningful for console/enterprise data sources.
+  backfillStart: ""
+  # Stop auto-probe after N consecutive empty days (default 14).
+  backfillEmptyStreak: ""
+  # Days of hourly (heatmap) history to backfill (default 30).
+  hourlyBackfillDays: ""
+
+# Extra environment variables, verbatim (list of core/v1 EnvVar).
+# extraEnv:
+#   - name: ENTERPRISE_PACE_MS
+#     value: "1100"
+extraEnv: []
+
+# ----------------------------------------------------------------------------
+# Secrets
+# ----------------------------------------------------------------------------
+# Two ways to provide secret env values:
+#  1. existingSecret: name of a Secret you manage yourself (kubectl / ESO /
+#     CSI driver). Expected keys: otel-ingest-token, admin-api-key,
+#     enterprise-analytics-key. All keys are OPTIONAL — missing keys are
+#     simply not injected (secretKeyRef optional: true), so a secret holding
+#     only otel-ingest-token is fine.
+#  2. Inline values below: the chart creates the Secret itself. Only used
+#     when existingSecret is empty AND at least one value is set.
+# Prefer existingSecret in production so tokens never touch Helm history.
+secrets:
+  existingSecret: ""
+  # Shared secret for POST /otel/*. STRONGLY recommended: without it the
+  # receiver accepts unauthenticated telemetry (e.g. openssl rand -hex 32).
+  otelIngestToken: ""
+  # Console Admin API key (sk-ant-admin...) — only for dataSource: console.
+  adminApiKey: ""
+  # claude.ai Enterprise Analytics key — only for dataSource: enterprise.
+  enterpriseAnalyticsKey: ""
+
+# ----------------------------------------------------------------------------
+# Persistence — the SQLite database (mounted at /app/data)
+# ----------------------------------------------------------------------------
+persistence:
+  enabled: true
+  size: 8Gi
+  # Azure Disk CSI. Must be a ReadWriteOnce class — Azure Disks cannot
+  # multi-attach, which is fine because the app is single-replica by design.
+  storageClassName: "managed-csi"
+  # Reuse a PVC you created yourself (skips creating one).
+  existingClaim: ""
+
+# ----------------------------------------------------------------------------
+# Exposure
+# ----------------------------------------------------------------------------
+# The dashboard has NO authentication — keep it cluster/VNet-internal.
+# Telemetry senders (dev laptops) must reach this Service, so the typical
+# production exposure is an INTERNAL Azure Load Balancer:
+#
+# service:
+#   type: LoadBalancer
+#   annotations:
+#     service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+#     # optionally pin a subnet:
+#     # service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "my-subnet"
+#
+# ...or an internal ingress controller (see ingress below).
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  # e.g. "nginx" (use an internal ingress class — the app has no auth)
+  className: ""
+  host: ""
+  # Extra annotations, e.g. cert-manager.io/cluster-issuer: my-issuer
+  annotations: {}
+  # tls:
+  #   - secretName: insights-tls
+  #     hosts: [insights.example.com]
+  tls: []
+
+# ----------------------------------------------------------------------------
+# Runtime
+# ----------------------------------------------------------------------------
+# Modest by default; SQLite + one Node process. Scale VERTICALLY here.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

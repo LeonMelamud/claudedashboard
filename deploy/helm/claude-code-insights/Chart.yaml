@@ -1,0 +1,19 @@
+apiVersion: v2
+name: claude-code-insights
+description: >-
+  Self-hosted Claude Code usage dashboard — Fastify + SQLite single-container
+  app serving the SPA, the /api backend, and the OTLP telemetry receiver
+  (POST /otel/v1/logs|metrics) on one HTTP port.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/zivhundert/claude-code-insights
+sources:
+  - https://github.com/zivhundert/claude-code-insights
+keywords:
+  - claude-code
+  - dashboard
+  - telemetry
+  - opentelemetry
+maintainers:
+  - name: Ziv Hundert

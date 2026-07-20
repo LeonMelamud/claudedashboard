@@ -1,0 +1,54 @@
+Claude Code Insights is deploying.
+
+1. Reach the dashboard
+{{- if .Values.ingress.enabled }}
+
+   http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/
+{{- else if eq .Values.service.type "LoadBalancer" }}
+
+   kubectl get svc {{ include "claude-code-insights.fullname" . }} -n {{ .Release.Namespace }} -w
+   # then open http://<EXTERNAL-IP>:{{ .Values.service.port }}/
+{{- else }}
+
+   kubectl port-forward svc/{{ include "claude-code-insights.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+   # then open http://localhost:8080/
+{{- end }}
+
+   The dashboard has NO authentication — keep the exposure internal
+   (ClusterIP / internal LB / internal ingress) or put SSO in front.
+
+2. Point Claude Code telemetry at the server
+
+   Set this in each dev machine's managed-settings.json (see
+   docs/telemetry-setup.md in the repo):
+
+{{- if .Values.ingress.enabled }}
+     "OTEL_EXPORTER_OTLP_ENDPOINT": "http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/otel"
+{{- else if eq .Values.service.type "LoadBalancer" }}
+     "OTEL_EXPORTER_OTLP_ENDPOINT": "http://<LB-EXTERNAL-IP>:{{ .Values.service.port }}/otel"
+{{- else }}
+     "OTEL_EXPORTER_OTLP_ENDPOINT": "http://<reachable-host>:{{ .Values.service.port }}/otel"
+     (ClusterIP is only reachable inside the cluster — dev laptops need an
+     internal LoadBalancer or ingress; see the chart's service/ingress values.)
+{{- end }}
+
+   No trailing /v1/... — the exporter appends /v1/logs and /v1/metrics.
+
+{{- if include "claude-code-insights.hasSecret" . }}
+
+   An ingest token is configured: every sender must also set
+     "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer <token>"
+{{- else }}
+
+   WARNING: no OTEL_INGEST_TOKEN configured — /otel accepts unauthenticated
+   POSTs. Fine on a trusted network; otherwise set secrets.otelIngestToken.
+{{- end }}
+
+3. Check health
+
+   kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+   # readiness/liveness probe: GET /api/health
+
+Note: this app runs exactly ONE replica (SQLite single-writer on a
+ReadWriteOnce disk). Upgrades use strategy Recreate, so expect a brief
+downtime during `helm upgrade` — that is by design.
