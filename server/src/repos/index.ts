@@ -25,10 +25,10 @@ export interface Repos {
   otelPacks: OtelPacksRepo;
 }
 
-export function createRepos(db: Db): Repos {
+export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
   return {
     users: new UserRepo(db),
-    teams: new TeamRepo(db),
+    teams: new TeamRepo(db, opts.rosterScoped),
     usage: new UsageRepo(db),
     sync: new SyncRepo(db),
     settings: new SettingsRepo(db),

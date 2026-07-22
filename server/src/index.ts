@@ -1,4 +1,5 @@
 import './shims';
+import { capabilitiesFor } from '@dash/shared';
 import { AnthropicClient } from './anthropic/client';
 import { EnterpriseClient } from './anthropic/enterpriseClient';
 import { buildApp } from './app';
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
   const db = openDb(env.dbPath);
   migrate(db);
 
-  const repos = createRepos(db);
+  const repos = createRepos(db, { rosterScoped: capabilitiesFor(env.dataSource).roster });
   repos.settings.ensureDefaults();
 
   const syncLog = new SyncLogBus();

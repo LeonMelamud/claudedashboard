@@ -1,8 +1,9 @@
-import type {
-  SegmentTier,
-  TeamSummary,
-  TeamsResponse,
-  TeamsSummaryResponse,
+import {
+  capabilitiesFor,
+  type SegmentTier,
+  type TeamSummary,
+  type TeamsResponse,
+  type TeamsSummaryResponse,
 } from '@dash/shared';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -49,8 +50,12 @@ export function registerTeamRoutes(app: FastifyInstance, ctx: AppContext): void 
     const q = parseRangeQuery(req.query);
     const data = buildLeaderboardData(ctx.repos, { from: q.from, to: q.to });
     // Roster-scoped like memberCount, so activePct cannot exceed 100 when a
-    // departed member still has usage inside the range.
-    const userEntries = data.entries.filter((e) => e.user.actorType === 'user' && e.user.inRoster);
+    // departed member still has usage inside the range. Sources without a
+    // roster (telemetry) only have observed users — include them all.
+    const rosterScoped = capabilitiesFor(ctx.env.dataSource).roster;
+    const userEntries = data.entries.filter(
+      (e) => e.user.actorType === 'user' && (!rosterScoped || e.user.inRoster),
+    );
 
     const teams: TeamSummary[] = ctx.repos.teams.list().map((team) => {
       const members = userEntries.filter((e) => e.user.teamId === team.id);

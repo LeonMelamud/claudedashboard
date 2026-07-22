@@ -19,23 +19,33 @@ function toTeamDto(row: TeamRow): TeamDto {
   };
 }
 
-const SELECT_TEAM = `
+// Roster-scoped counting keeps departed employees (in_roster=0 after a roster
+// sync) out of member counts. Sources without a roster (telemetry mode) only
+// have observed users, all in_roster=0 — count every assigned user there.
+const selectTeam = (rosterScoped: boolean): string => `
   SELECT t.id, t.name, t.color, t.lead_user_id,
          (SELECT COUNT(*) FROM users u
-          WHERE u.team_id = t.id AND u.actor_type = 'user' AND u.in_roster = 1) AS member_count
+          WHERE u.team_id = t.id AND u.actor_type = 'user'${rosterScoped ? ' AND u.in_roster = 1' : ''}) AS member_count
   FROM teams t
 `;
 
 export class TeamRepo {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly rosterScoped: boolean,
+  ) {}
 
   list(): TeamDto[] {
-    const rows = this.db.prepare(`${SELECT_TEAM} ORDER BY t.name COLLATE NOCASE`).all() as TeamRow[];
+    const rows = this.db
+      .prepare(`${selectTeam(this.rosterScoped)} ORDER BY t.name COLLATE NOCASE`)
+      .all() as TeamRow[];
     return rows.map(toTeamDto);
   }
 
   get(id: number): TeamDto | undefined {
-    const row = this.db.prepare(`${SELECT_TEAM} WHERE t.id = ?`).get(id) as TeamRow | undefined;
+    const row = this.db.prepare(`${selectTeam(this.rosterScoped)} WHERE t.id = ?`).get(id) as
+      | TeamRow
+      | undefined;
     return row ? toTeamDto(row) : undefined;
   }
 

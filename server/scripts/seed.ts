@@ -205,7 +205,7 @@ function main(): void {
   const dbPath = process.env['DB_PATH'] ?? './data/dashboard.db';
   const db = openDb(dbPath);
   migrate(db);
-  const repos = createRepos(db);
+  const repos = createRepos(db, { rosterScoped: true });
 
   // --- wipe data tables (FK-safe order) ---
   for (const table of [
