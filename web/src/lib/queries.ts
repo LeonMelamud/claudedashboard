@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AppSettings, Granularity, SyncJobType, SyncLogLine } from '@dash/shared';
+import type {
+  AppSettings,
+  BreakdownDimension,
+  Granularity,
+  SyncJobType,
+  SyncLogLine,
+} from '@dash/shared';
 import { api, type RangeQ } from '@/lib/api';
 
 const key = (q: RangeQ) => [q.from ?? null, q.to ?? null, q.teamId != null ? String(q.teamId) : null];
@@ -151,6 +157,18 @@ export function useEcosystem(q: RangeQ & { userId?: number | undefined }, enable
     queryKey: packKey('telemetry-ecosystem', q),
     queryFn: () => api.telemetryEcosystem(q),
     enabled,
+  });
+}
+
+export function useBreakdown(
+  dimension: BreakdownDimension | null,
+  entity: string,
+  q: RangeQ,
+) {
+  return useQuery({
+    queryKey: ['breakdown', dimension, entity, q.from, q.to, q.teamId ?? null],
+    queryFn: () => api.breakdown(dimension as BreakdownDimension, entity, q),
+    enabled: dimension !== null,
   });
 }
 

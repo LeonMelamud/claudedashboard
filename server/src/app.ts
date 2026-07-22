@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { AppContext } from './context';
 import { registerAdoptionRoutes } from './routes/adoption';
 import { registerApiKeyRoutes } from './routes/apiKeys';
+import { registerBreakdownRoutes } from './routes/breakdown';
 import { registerCapabilityRoutes } from './routes/capabilities';
 import { registerCostRoutes } from './routes/costs';
 import { registerDimensionRoutes } from './routes/dimensions';
@@ -63,6 +64,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   registerAdoptionRoutes(app, ctx);
   registerSkillRoutes(app, ctx);
   registerTelemetryPackRoutes(app, ctx);
+  registerBreakdownRoutes(app, ctx);
   await registerOtelRoutes(app, ctx); // OTLP receiver — must precede the SPA fallback
   registerSyncRoutes(app, ctx);
   registerSettingsRoutes(app, ctx);

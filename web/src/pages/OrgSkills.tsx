@@ -20,6 +20,7 @@ import { StatCard } from '@/components/StatCard';
 import { StatSkeleton, TableSkeleton } from '@/components/Skeleton';
 import { ErrorCard } from '@/components/ErrorCard';
 import { Avatar } from '@/components/Avatar';
+import { BreakdownDrawer, DrillCount, type BreakdownTarget } from '@/components/BreakdownDrawer';
 import { TelemetrySetupCard } from '@/components/TelemetrySetupCard';
 import { WhatsCollectedLink } from '@/components/TelemetryPolicyDialog';
 import { Segmented, Tip } from '@/components/ui';
@@ -38,6 +39,7 @@ export default function OrgSkills() {
   const ecosystemQ = useEcosystem({ from, to, teamId });
   // org active users for the "share of actives" KPI footer (cached from Overview)
   const overviewQ = useOverview({ from, to, teamId });
+  const [drill, setDrill] = useState<BreakdownTarget | null>(null);
 
   const skills = skillsQ.data;
   const noData = !!skills && !skills.hasData;
@@ -95,7 +97,7 @@ export default function OrgSkills() {
                     <AgentsDonut instanceRef={ref} rows={skills?.agents ?? []} />
                   </div>
                   <div className="min-w-0 flex-1 overflow-x-auto">
-                    <AgentsTable rows={skills?.agents ?? []} />
+                    <AgentsTable rows={skills?.agents ?? []} onDrill={setDrill} />
                   </div>
                 </div>
               )}
@@ -112,7 +114,7 @@ export default function OrgSkills() {
               isEmpty={noData || (!!skills && skills.tools.length === 0)}
               emptyText={noData ? 'Waiting for telemetry events' : 'No tool events in this range'}
             >
-              <ToolUsageList rows={skills?.tools ?? []} />
+              <ToolUsageList rows={skills?.tools ?? []} onDrill={setDrill} />
             </ChartCard>
 
             <ChartCard
@@ -132,7 +134,7 @@ export default function OrgSkills() {
               )}
             </ChartCard>
 
-            {eco?.hasData && <EcosystemSection eco={eco} />}
+            {eco?.hasData && <EcosystemSection eco={eco} onDrill={setDrill} />}
 
             {skills && (
               <div className="col-span-12 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
@@ -148,6 +150,7 @@ export default function OrgSkills() {
 
         <HiddenChartChips />
       </div>
+      <BreakdownDrawer target={drill} onClose={() => setDrill(null)} range={{ from, to, teamId }} />
     </ChartPage>
   );
 }
@@ -444,7 +447,13 @@ function AgentsDonut({ instanceRef, rows }: { instanceRef: ChartRef; rows: Agent
   return <EChart option={option} instanceRef={instanceRef} className="h-52" />;
 }
 
-function AgentsTable({ rows }: { rows: AgentUsageRow[] }) {
+function AgentsTable({
+  rows,
+  onDrill,
+}: {
+  rows: AgentUsageRow[];
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   const sorted = useMemo(() => [...rows].sort((a, b) => b.invocations - a.invocations), [rows]);
   return (
     <table className="w-full min-w-[380px] border-collapse text-sm">
@@ -475,7 +484,16 @@ function AgentsTable({ rows }: { rows: AgentUsageRow[] }) {
                 {fmtNumber(a.invocations)}
               </td>
               <td className="whitespace-nowrap px-2.5 py-1.5 text-right text-xs text-muted">
-                {fmtNumber(a.users)}
+                <DrillCount
+                  value={a.users}
+                  onClick={() =>
+                    onDrill({
+                      dimension: 'agent',
+                      entity: a.subagentType,
+                      title: `Subagent · ${a.subagentType}`,
+                    })
+                  }
+                />
               </td>
               <td
                 className={cn(
@@ -500,7 +518,13 @@ function AgentsTable({ rows }: { rows: AgentUsageRow[] }) {
 // Tool usage list (HTML bars — handles MCP chips + acceptance labels)
 // ---------------------------------------------------------------------------
 
-function ToolUsageList({ rows }: { rows: ToolUsageRow[] }) {
+function ToolUsageList({
+  rows,
+  onDrill,
+}: {
+  rows: ToolUsageRow[];
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   const top = useMemo(() => [...rows].sort((a, b) => b.uses - a.uses).slice(0, 15), [rows]);
   const max = top[0]?.uses ?? 0;
   return (
@@ -517,9 +541,16 @@ function ToolUsageList({ rows }: { rows: ToolUsageRow[] }) {
                   mcp
                 </span>
               )}
-              <span className="truncate font-mono text-[11.5px]" title={toolName}>
+              <button
+                type="button"
+                onClick={() =>
+                  onDrill({ dimension: 'tool', entity: toolName, title: `Tool · ${displayName}` })
+                }
+                title={`${toolName} — see who uses it`}
+                className="truncate text-left font-mono text-[11.5px] underline decoration-dotted underline-offset-2 transition-colors hover:text-accent"
+              >
                 {displayName}
-              </span>
+              </button>
             </span>
             <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-fg/10">
               <span
@@ -677,7 +708,13 @@ function PowerUsersTable({ rows }: { rows: UserSkillRow[] }) {
 // Ecosystem (telemetry metrics pack): MCP servers / plugins / versions / mix
 // ---------------------------------------------------------------------------
 
-function EcosystemSection({ eco }: { eco: EcosystemResponse }) {
+function EcosystemSection({
+  eco,
+  onDrill,
+}: {
+  eco: EcosystemResponse;
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   return (
     <>
       <div className="col-span-12 mt-1 text-xs font-semibold uppercase tracking-wider text-muted">
@@ -694,7 +731,7 @@ function EcosystemSection({ eco }: { eco: EcosystemResponse }) {
         isEmpty={eco.mcpServers.length === 0}
         emptyText="No MCP activity in this range"
       >
-        <McpServersTable rows={eco.mcpServers} />
+        <McpServersTable rows={eco.mcpServers} onDrill={onDrill} />
       </ChartCard>
 
       <ChartCard
@@ -707,7 +744,7 @@ function EcosystemSection({ eco }: { eco: EcosystemResponse }) {
         isEmpty={eco.plugins.length === 0}
         emptyText="No plugin activity in this range"
       >
-        <PluginsList rows={eco.plugins} />
+        <PluginsList rows={eco.plugins} onDrill={onDrill} />
       </ChartCard>
 
       <ChartCard
@@ -720,7 +757,7 @@ function EcosystemSection({ eco }: { eco: EcosystemResponse }) {
         isEmpty={eco.versions.length === 0}
         emptyText="No version telemetry in this range"
       >
-        <VersionDriftBars rows={eco.versions} />
+        <VersionDriftBars rows={eco.versions} onDrill={onDrill} />
       </ChartCard>
 
       <ChartCard
@@ -738,7 +775,13 @@ function EcosystemSection({ eco }: { eco: EcosystemResponse }) {
   );
 }
 
-function McpServersTable({ rows }: { rows: EcosystemResponse['mcpServers'] }) {
+function McpServersTable({
+  rows,
+  onDrill,
+}: {
+  rows: EcosystemResponse['mcpServers'];
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   const sorted = useMemo(() => [...rows].sort((a, b) => b.toolCalls - a.toolCalls), [rows]);
   return (
     <div className="overflow-x-auto">
@@ -790,7 +833,16 @@ function McpServersTable({ rows }: { rows: EcosystemResponse['mcpServers'] }) {
                   )}
                 </td>
                 <td className="whitespace-nowrap px-2.5 py-1.5 text-right text-xs text-muted">
-                  {fmtNumber(s.users)}
+                  <DrillCount
+                    value={s.users}
+                    onClick={() =>
+                      onDrill({
+                        dimension: 'mcp',
+                        entity: s.serverName,
+                        title: `MCP server · ${s.serverName}`,
+                      })
+                    }
+                  />
                 </td>
               </tr>
             );
@@ -801,7 +853,13 @@ function McpServersTable({ rows }: { rows: EcosystemResponse['mcpServers'] }) {
   );
 }
 
-function PluginsList({ rows }: { rows: EcosystemResponse['plugins'] }) {
+function PluginsList({
+  rows,
+  onDrill,
+}: {
+  rows: EcosystemResponse['plugins'];
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   const sorted = useMemo(() => [...rows].sort((a, b) => b.loads - a.loads), [rows]);
   const maxLoads = sorted[0]?.loads ?? 0;
   return (
@@ -819,7 +877,18 @@ function PluginsList({ rows }: { rows: EcosystemResponse['plugins'] }) {
           </span>
           <span className="w-14 shrink-0 text-right text-xs">{fmtNumber(p.loads)}</span>
           <span className="w-32 shrink-0 text-right text-[10.5px] text-muted">
-            {fmtNumber(p.installs)} installs · {fmtNumber(p.users)} users
+            {fmtNumber(p.installs)} installs ·{' '}
+            <DrillCount
+              value={p.users}
+              suffix=" users"
+              onClick={() =>
+                onDrill({
+                  dimension: 'plugin',
+                  entity: p.pluginName,
+                  title: `Plugin · ${p.pluginName}`,
+                })
+              }
+            />
           </span>
         </li>
       ))}
@@ -827,7 +896,13 @@ function PluginsList({ rows }: { rows: EcosystemResponse['plugins'] }) {
   );
 }
 
-function VersionDriftBars({ rows }: { rows: EcosystemResponse['versions'] }) {
+function VersionDriftBars({
+  rows,
+  onDrill,
+}: {
+  rows: EcosystemResponse['versions'];
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   const sorted = useMemo(
     () => [...rows].sort((a, b) => b.appVersion.localeCompare(a.appVersion, undefined, { numeric: true })),
     [rows],
@@ -860,7 +935,17 @@ function VersionDriftBars({ rows }: { rows: EcosystemResponse['versions'] }) {
               />
             </span>
             <span className={cn('w-16 shrink-0 text-right text-xs', isLatest ? 'text-fg' : 'text-muted')}>
-              {fmtNumber(v.users)} {v.users === 1 ? 'user' : 'users'}
+              <DrillCount
+                value={v.users}
+                suffix={v.users === 1 ? ' user' : ' users'}
+                onClick={() =>
+                  onDrill({
+                    dimension: 'version',
+                    entity: v.appVersion,
+                    title: `Claude Code ${v.appVersion}`,
+                  })
+                }
+              />
             </span>
           </li>
         );

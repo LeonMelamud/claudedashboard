@@ -1,5 +1,7 @@
 import type {
   ActivityResponse,
+  BreakdownDimension,
+  BreakdownResponse,
   AdoptionResponse,
   ApiKeysResponse,
   AppSettings,
@@ -174,6 +176,11 @@ export const api = {
     ),
 
   /** telemetry packs — MCP servers / plugins / versions / model mix */
+  breakdown: (dimension: BreakdownDimension, entity: string, q: RangeQ) =>
+    request<BreakdownResponse>(
+      `/api/breakdown${qs({ dimension, entity, from: q.from, to: q.to, teamId: q.teamId })}`,
+    ),
+
   telemetryEcosystem: (q: RangeQ & { userId?: number | undefined }) =>
     request<EcosystemResponse>(
       `/api/telemetry/ecosystem${qs({ from: q.from, to: q.to, teamId: q.teamId, userId: q.userId })}`,

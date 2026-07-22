@@ -1,5 +1,6 @@
 import type { Db } from '../db/connection';
 import { ApiKeyRepo } from './apiKeyRepo';
+import { BreakdownRepo } from './breakdownRepo';
 import { CostRepo } from './costRepo';
 import { DimensionsRepo } from './dimensionsRepo';
 import { OrgSummaryRepo } from './orgSummaryRepo';
@@ -23,6 +24,7 @@ export interface Repos {
   orgSummaries: OrgSummaryRepo;
   otel: OtelRepo;
   otelPacks: OtelPacksRepo;
+  breakdown: BreakdownRepo;
 }
 
 export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
@@ -38,11 +40,13 @@ export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
     orgSummaries: new OrgSummaryRepo(db),
     otel: new OtelRepo(db),
     otelPacks: new OtelPacksRepo(db),
+    breakdown: new BreakdownRepo(db),
   };
 }
 
 export {
   ApiKeyRepo,
+  BreakdownRepo,
   CostRepo,
   DimensionsRepo,
   OrgSummaryRepo,

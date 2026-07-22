@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ShieldAlert } from 'lucide-react';
 import type { DecisionSource, GovernanceResponse, Granularity, ReliabilityResponse } from '@dash/shared';
 import { useRangeParams } from '@/hooks/useRangeParams';
 import { useGovernance, useReliability } from '@/lib/queries';
+import { BreakdownDrawer, DrillCount, type BreakdownTarget } from '@/components/BreakdownDrawer';
 import { useChartTheme, asTipArray, type ChartTheme } from '@/lib/chartTheme';
 import { bucketRows, sumBy } from '@/lib/time';
 import { fmtBucket, fmtNumber, fmtPct } from '@/lib/format';
@@ -37,6 +38,7 @@ export default function OrgHealth() {
   const { from, to, gran, teamId } = useRangeParams();
   const reliabilityQ = useReliability({ from, to, teamId });
   const governanceQ = useGovernance({ from, to, teamId });
+  const [drill, setDrill] = useState<BreakdownTarget | null>(null);
 
   const rel = reliabilityQ.data;
   const gov = governanceQ.data;
@@ -112,7 +114,7 @@ export default function OrgHealth() {
           {reliabilityQ.isLoading ? (
             <TableSkeleton rows={4} cols={5} />
           ) : (
-            <ByModelTable rows={rel?.byModel ?? []} />
+            <ByModelTable rows={rel?.byModel ?? []} onDrill={setDrill} />
           )}
         </ChartCard>
 
@@ -151,7 +153,7 @@ export default function OrgHealth() {
               isEmpty={govNoData || (!!gov && gov.permissionModes.length === 0)}
               emptyText={govNoData ? 'Waiting for telemetry events' : 'No mode changes in this range'}
             >
-              <PermissionModesTable rows={gov?.permissionModes ?? []} />
+              <PermissionModesTable rows={gov?.permissionModes ?? []} onDrill={setDrill} />
             </ChartCard>
 
             <ChartCard
@@ -179,6 +181,7 @@ export default function OrgHealth() {
 
         <HiddenChartChips />
       </div>
+      <BreakdownDrawer target={drill} onClose={() => setDrill(null)} range={{ from, to, teamId }} />
     </ChartPage>
   );
 }
@@ -391,7 +394,13 @@ function ErrorStatusDonut({
 // By-model table
 // ---------------------------------------------------------------------------
 
-function ByModelTable({ rows }: { rows: ReliabilityResponse['byModel'] }) {
+function ByModelTable({
+  rows,
+  onDrill,
+}: {
+  rows: ReliabilityResponse['byModel'];
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   const sorted = useMemo(() => [...rows].sort((a, b) => b.apiRequests - a.apiRequests), [rows]);
   return (
     <div className="overflow-x-auto">
@@ -415,7 +424,20 @@ function ByModelTable({ rows }: { rows: ReliabilityResponse['byModel'] }) {
           {sorted.map((m) => (
             <tr key={m.model} className="border-b border-border/60 transition-colors hover:bg-fg/[0.025]">
               <td className="max-w-64 truncate px-2.5 py-2 text-[12.5px] font-medium" title={m.model}>
-                {m.model}
+                <button
+                  type="button"
+                  onClick={() =>
+                    onDrill({
+                      dimension: 'model-reliability',
+                      entity: m.model,
+                      title: `Reliability · ${m.model}`,
+                    })
+                  }
+                  title={`${m.model} — see who hits errors`}
+                  className="truncate underline decoration-dotted underline-offset-2 transition-colors hover:text-accent"
+                >
+                  {m.model}
+                </button>
               </td>
               <td className="whitespace-nowrap px-2.5 py-2 text-right text-[12.5px]">
                 {fmtNumber(m.apiRequests)}
@@ -523,7 +545,13 @@ function DecisionSourcesStacked({
 const isBypassy = (mode: string) =>
   /bypass|dontask|dont_ask|yolo|dangerous/i.test(mode) || mode === 'acceptEdits';
 
-function PermissionModesTable({ rows }: { rows: GovernanceResponse['permissionModes'] }) {
+function PermissionModesTable({
+  rows,
+  onDrill,
+}: {
+  rows: GovernanceResponse['permissionModes'];
+  onDrill: (t: BreakdownTarget) => void;
+}) {
   const sorted = useMemo(() => [...rows].sort((a, b) => b.changes - a.changes), [rows]);
   return (
     <table className="w-full border-collapse text-sm">
@@ -561,7 +589,16 @@ function PermissionModesTable({ rows }: { rows: GovernanceResponse['permissionMo
               {fmtNumber(m.changes)}
             </td>
             <td className="whitespace-nowrap px-2.5 py-2 text-right text-xs text-muted">
-              {fmtNumber(m.users)}
+              <DrillCount
+                value={m.users}
+                onClick={() =>
+                  onDrill({
+                    dimension: 'permission-mode',
+                    entity: m.mode,
+                    title: `Permission mode · ${m.mode}`,
+                  })
+                }
+              />
             </td>
           </tr>
         ))}

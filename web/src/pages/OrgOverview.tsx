@@ -23,6 +23,7 @@ import {
   useSettings,
   useTeams,
 } from '@/lib/queries';
+import { BreakdownDrawer, type BreakdownTarget } from '@/components/BreakdownDrawer';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
 import { bucketRows, sumBy } from '@/lib/time';
 import {
@@ -53,6 +54,7 @@ import { Field, inputCls, InfoPopover, Segmented } from '@/components/ui';
 export default function OrgOverview() {
   const { from, to, gran, teamId } = useRangeParams();
   const q = { from, to, teamId };
+  const [drill, setDrill] = useState<BreakdownTarget | null>(null);
   const overviewQ = useOverview({ ...q, gran });
   const leaderboardQ = useLeaderboard(q);
   const heatmapQ = useHeatmap(q);
@@ -76,7 +78,7 @@ export default function OrgOverview() {
   return (
     <ChartPage pageId="org">
       <div className="grid grid-cols-12 gap-4">
-        <KpiStrip ov={ov} loading={overviewQ.isLoading} seatCounts={seatCounts} />
+        <KpiStrip ov={ov} loading={overviewQ.isLoading} seatCounts={seatCounts} onDrill={setDrill} />
 
         <ChartCard
           title="Activity trend"
@@ -231,6 +233,7 @@ export default function OrgOverview() {
 
         <HiddenChartChips />
       </div>
+      <BreakdownDrawer target={drill} onClose={() => setDrill(null)} range={{ from, to, teamId }} />
     </ChartPage>
   );
 }
@@ -243,11 +246,13 @@ function KpiStrip({
   ov,
   loading,
   seatCounts,
+  onDrill,
 }: {
   ov: OverviewResponse | undefined;
   loading: boolean;
   /** false = no authoritative roster: the denominator is observed users */
   seatCounts: boolean;
+  onDrill: (t: BreakdownTarget) => void;
 }) {
   if (loading || !ov) {
     return (
@@ -272,7 +277,20 @@ function KpiStrip({
         prev={prevKpis.activeUsers}
         metricKey="activeUsers"
         sparkline={spark((d) => d.activeUsers)}
-        footer={`${fmtPct100(kpis.adoptionPct)} of ${kpis.rosteredUsers} ${seatCounts ? 'rostered' : 'observed users'}`}
+        footer={
+          <span className="flex items-center justify-between gap-2">
+            <span>{`${fmtPct100(kpis.adoptionPct)} of ${kpis.rosteredUsers} ${seatCounts ? 'rostered' : 'observed users'}`}</span>
+            <button
+              type="button"
+              onClick={() =>
+                onDrill({ dimension: 'active-users', entity: '', title: 'Active users' })
+              }
+              className="shrink-0 underline decoration-dotted underline-offset-2 transition-colors hover:text-accent"
+            >
+              see who
+            </button>
+          </span>
+        }
       />
       <StatCard
         label="Sessions"

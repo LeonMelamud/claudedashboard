@@ -683,6 +683,51 @@ export interface EcosystemResponse {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/breakdown — "who are the users" behind any aggregate count
+// ---------------------------------------------------------------------------
+
+/** Allowlisted drill-down dimensions; each maps to one pack/core table. */
+export const BREAKDOWN_DIMENSIONS = [
+  'skill',
+  'agent',
+  'tool',
+  'mcp',
+  'plugin',
+  'version',
+  'model-reliability',
+  'permission-mode',
+  'active-users',
+] as const;
+export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number];
+
+export interface BreakdownColumn {
+  key: string;
+  label: string;
+  format: 'number' | 'cents' | 'pct';
+}
+
+export interface BreakdownUserRow {
+  userId: number;
+  name: string;
+  email: string | null;
+  teamId: number | null;
+  /** keyed by BreakdownColumn.key */
+  metrics: Record<string, number>;
+  /** last day with activity in range (null for stateful dimensions like version) */
+  lastDate: string | null;
+}
+
+export interface BreakdownResponse {
+  dimension: BreakdownDimension;
+  /** the entity drilled into ('' for entity-less dimensions like active-users) */
+  entity: string;
+  range: { from: string; to: string };
+  columns: BreakdownColumn[];
+  /** sorted by the first column's metric, descending */
+  rows: BreakdownUserRow[];
+}
+
+// ---------------------------------------------------------------------------
 // Common query params (documented once; all analytics endpoints accept these)
 // ---------------------------------------------------------------------------
 
