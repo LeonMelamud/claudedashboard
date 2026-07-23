@@ -49,6 +49,11 @@ export function TelemetrySetupCard({
             See <span className="font-medium text-fg/80">README → Telemetry rollout</span> for the
             step-by-step guide.
           </p>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            <span className="font-medium text-fg/80">Coverage:</span> CLI, IDE extensions
+            (VS&nbsp;Code/JetBrains), and SDK/CI sessions export telemetry. The Claude Desktop app and
+            claude.ai web sessions don’t run the exporter, so they never appear here.
+          </p>
           <div className="mt-3">
             <WhatsCollectedLink />
           </div>

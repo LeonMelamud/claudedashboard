@@ -7,6 +7,15 @@ Claude Code has a built-in OpenTelemetry exporter. Point it at your Claude Code 
 
 Events typically arrive within ~5 seconds of the activity. In **telemetry mode** (no API key configured) this feed also powers the core usage pages; in Console/Enterprise mode it adds the telemetry packs on top of the API sync without double-counting.
 
+## What's covered (and what isn't)
+
+Claude Code runs the OTel exporter in its **CLI, IDE-extension (VS Code / JetBrains), and SDK/headless (CI) entrypoints** — those sessions all report here once configured. Two surfaces do **not** export telemetry, no matter how they're configured:
+
+- the **Claude Desktop app** — its agent sessions don't apply the exporter env (verified empirically; the [monitoring docs](https://code.claude.com/docs/en/monitoring-usage) list only CLI/SDK/IDE entrypoints), and
+- **claude.ai web / mobile sessions** — they execute on Anthropic's cloud, where machine-level configuration doesn't exist.
+
+Read the dashboard accordingly: it measures coding-surface usage, not all Claude usage.
+
 ## 1. Decide what you collect: privacy tiers
 
 Set `PRIVACY_MODE` in the server's `.env` (`minimal` | `balanced` | `full`, default `balanced`). Every incoming record is filtered **at ingest, before anything is stored** — the policy is data, executed at a single choke point, and the exact policy object is served at `GET /api/telemetry-policy` and shown to every viewer in the in-app **"What's collected"** transparency dialog.

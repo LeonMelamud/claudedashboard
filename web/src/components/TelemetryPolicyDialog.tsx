@@ -125,6 +125,13 @@ export function TelemetryPolicyDialog({
             what you see here is exactly what gets stored. {mode?.blurb}
           </p>
 
+          <p className="rounded-lg border border-border bg-fg/[0.03] p-3 text-[11.5px] leading-relaxed text-muted">
+            <span className="font-medium text-fg/80">Coverage:</span> Claude Code exports telemetry
+            from CLI, IDE-extension (VS&nbsp;Code/JetBrains), and SDK/CI sessions. The Claude Desktop
+            app and claude.ai web sessions don&apos;t run the exporter, so numbers here reflect
+            coding-surface usage only.
+          </p>
+
           {policy.notes.length > 0 && (
             <ul className="space-y-1 rounded-lg border border-border bg-fg/[0.03] p-3">
               {policy.notes.map((note) => (
