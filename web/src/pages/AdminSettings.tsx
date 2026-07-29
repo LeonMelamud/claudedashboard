@@ -57,12 +57,11 @@ export default function AdminSettings() {
 
       <section className="card space-y-4 p-5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">Display</h2>
-        <Field label="Display timezone" hint="Used for the hour-of-week heatmaps.">
-          <input
-            value={form.displayTimezone}
-            onChange={(e) => setForm((f) => ({ ...f, displayTimezone: e.target.value }))}
-            className={inputCls}
-          />
+        <Field
+          label="Display timezone"
+          hint="Set by ORG_TIMEZONE on the server — daily buckets are keyed by this zone, so it cannot change from here."
+        >
+          <input value={form.displayTimezone} readOnly disabled className={inputCls} />
         </Field>
 
         <h2 className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted">

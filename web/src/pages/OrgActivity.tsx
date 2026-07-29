@@ -5,7 +5,7 @@ import type { ActivityResponse, Granularity } from '@dash/shared';
 import { useRangeParams } from '@/hooks/useRangeParams';
 import { useActivity } from '@/lib/queries';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
-import { DISPLAY_ZONE, bucketRows, sumBy } from '@/lib/time';
+import { displayZone, bucketRows, sumBy } from '@/lib/time';
 import { fmtBucket, fmtDurationMs, fmtDurationSec, fmtNumber } from '@/lib/format';
 import { ChartCard, ChartPage, HiddenChartChips } from '@/components/ChartCard';
 import { EChart, type EChartsOption } from '@/components/EChart';
@@ -357,7 +357,7 @@ function LiveTodayCard({
       chartId="live-today"
       metricKey="promptCadence"
       infoExtra="Hourly prompts, API requests, and active people over the last 24 hours, straight from the live OTel feed. Auto-refreshes every 60 seconds."
-      subtitle={`Last 24h · ${DISPLAY_ZONE} hours`}
+      subtitle={`Last 24h · ${displayZone()} hours`}
       actions={<LivePulseDot />}
       className="col-span-12 lg:col-span-8"
       isLoading={isLoading}
@@ -379,7 +379,7 @@ function LiveTodayChart({
   const t = useChartTheme();
   const option = useMemo<EChartsOption>(() => {
     const labels = hours.map((h) =>
-      DateTime.fromISO(h.hourUtc, { zone: 'utc' }).setZone(DISPLAY_ZONE).toFormat('HH:00'),
+      DateTime.fromISO(h.hourUtc, { zone: 'utc' }).setZone(displayZone()).toFormat('HH:00'),
     );
     return {
       textStyle: { color: t.fg, fontFamily: 'inherit' },

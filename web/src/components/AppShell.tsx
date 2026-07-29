@@ -20,7 +20,7 @@ import {
   Wallet,
   Wrench,
 } from 'lucide-react';
-import { useCapabilities } from '@/lib/queries';
+import { useCapabilities, useSettings } from '@/lib/queries';
 import { useThemeStore } from '@/state/theme';
 import { usePersonaStore } from '@/state/persona';
 import { usePrefsStore } from '@/state/prefs';
@@ -31,6 +31,7 @@ import { SyncPill } from '@/components/SyncPill';
 import { PersonaSwitcher } from '@/components/PersonaSwitcher';
 import { Toaster } from '@/components/Toaster';
 import { Tip } from '@/components/ui';
+import { displayZone, setDisplayZone } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -111,6 +112,14 @@ export function AppShell() {
   const [guideOpen, setGuideOpen] = useState(false);
   const caps = useCapabilities().data?.capabilities;
   const nav = useMemo(() => mainNav(caps), [caps]);
+
+  // The server keys its daily tables by ORG_TIMEZONE — every calendar-day
+  // comparison in the UI has to agree with it. Set DURING render, not in an
+  // effect: the zone is a module global, so an effect would leave the first
+  // render (and anything it memoized) on the fallback zone.
+  const serverZone = useSettings().data?.displayTimezone;
+  setDisplayZone(serverZone);
+  const zone = displayZone();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -233,8 +242,10 @@ export function AppShell() {
           </Tip>
         </header>
 
+        {/* keyed on the zone so the subtree re-derives when it arrives — memos
+            that don't depend on it would otherwise keep the fallback's dates */}
         <main className="mx-auto w-full max-w-screen-2xl flex-1 p-4">
-          <Outlet />
+          <Outlet key={zone} />
         </main>
       </div>
 

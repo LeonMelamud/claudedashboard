@@ -4,6 +4,7 @@ import { CalendarRange } from 'lucide-react';
 import { RANGE_PRESETS, useRangeParams } from '@/hooks/useRangeParams';
 import { Segmented, Button, inputCls } from '@/components/ui';
 import { fmtDateShort } from '@/lib/format';
+import { displayZone } from '@/lib/time';
 
 export function RangePicker() {
   const { preset, from, to, setPreset, setCustom } = useRangeParams();
@@ -50,7 +51,7 @@ export function RangePicker() {
             sideOffset={6}
             className="card pop-in z-50 w-64 space-y-2.5 p-3 shadow-xl"
           >
-            <div className="text-xs font-semibold">Custom range (Israel-local days)</div>
+            <div className="text-xs font-semibold">Custom range ({displayZone()} days)</div>
             <label className="block text-[11px] text-muted">
               From
               <input

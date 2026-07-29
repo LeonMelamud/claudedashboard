@@ -23,7 +23,7 @@ export interface ScoringInput {
   cacheReadTokens: number;
   /** total tokens per model, for Polyglot */
   modelTokens: Record<string, number>;
-  /** share (0..1) of hourly activity in 22:00–04:59 / 05:00–08:59 Israel time; null = no hourly data */
+  /** share (0..1) of hourly activity in 22:00–04:59 / 05:00–08:59 org-local time; null = no hourly data */
   nightShare: number | null;
   earlyShare: number | null;
   /** trailing-90d consecutive active workdays */

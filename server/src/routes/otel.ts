@@ -17,7 +17,6 @@
  * skipped, never 500.
  */
 import { createHash } from 'node:crypto';
-import { ilDateOfIso } from '@dash/shared';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AppContext } from '../context';
 import {
@@ -27,6 +26,7 @@ import {
   getString,
   parseToolParameters,
   timeOfUnixNano,
+  nowEventTime,
   EmailUserResolver,
   type AttrMap,
 } from '../otel/common';
@@ -330,10 +330,7 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
     const time =
       timeOfUnixNano(record['timeUnixNano']) ??
       timeOfUnixNano(record['observedTimeUnixNano']) ??
-      (() => {
-        const now = new Date();
-        return { date: ilDateOfIso(now), iso: now.toISOString() };
-      })();
+      nowEventTime();
     const { date, iso } = time;
     const hourUtc = hourIsoOfIso(iso);
 

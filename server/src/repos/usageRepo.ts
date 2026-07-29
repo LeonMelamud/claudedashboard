@@ -1,4 +1,6 @@
+import { utcHourRangeOfLocalDays } from '@dash/shared';
 import type { Db } from '../db/connection';
+import { orgTimezone } from '../util/time';
 
 // ---------------------------------------------------------------------------
 // Row shapes returned by the aggregate queries
@@ -389,13 +391,14 @@ export class UsageRepo {
 
   /** Hourly token activity per user per hour (rows are already unique per user+hour). */
   hourlyTokens(from: string, to: string): HourlyTokenRow[] {
+    const { fromHour, toHour } = utcHourRangeOfLocalDays(from, to, orgTimezone());
     return this.db
       .prepare(
         `SELECT h.user_id AS user_id, h.hour_utc AS hour_utc, ${HOURLY_TOKENS_SUM} AS tokens
          FROM usage_hourly h
          WHERE h.hour_utc >= ? AND h.hour_utc <= ?`,
       )
-      .all(`${from}T00:00:00Z`, `${to}T23:00:00Z`) as HourlyTokenRow[];
+      .all(fromHour, toHour) as HourlyTokenRow[];
   }
 
   /** Distinct active dates per user in [from, to] (any usage row). */
@@ -516,8 +519,7 @@ export class UsageRepo {
          ORDER BY h.hour_utc`,
       )
       .all({
-        fromHour: `${from}T00:00:00Z`,
-        toHour: `${to}T23:00:00Z`,
+        ...utcHourRangeOfLocalDays(from, to, orgTimezone()),
         teamId: opts.teamId,
         userId: opts.userId,
       }) as HeatmapRow[];

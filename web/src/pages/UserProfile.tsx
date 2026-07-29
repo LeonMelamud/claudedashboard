@@ -251,7 +251,7 @@ function ProfileHeader({
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
             <span className="inline-flex items-center gap-1 font-medium text-warn">
               <Flame size={13} />
-              {entry.streak.current} workday{entry.streak.current === 1 ? '' : 's'} streak
+              {entry.streak.current} day{entry.streak.current === 1 ? '' : 's'} streak
               <span className="font-normal text-muted">(best {entry.streak.best})</span>
             </span>
             {rank && (
@@ -470,7 +470,7 @@ function ActivityCalendarCard({
       chartId="activity-calendar"
       metricKey="activityCalendar"
       infoExtra="Trailing 12 months of activity, independent of the selected range."
-      subtitle={`🔥 Current streak ${streak.current} workdays · best ${streak.best}`}
+      subtitle={`🔥 Current streak ${streak.current} days · best ${streak.best}`}
       actions={
         <Segmented size="xs" options={CALENDAR_METRIC_OPTIONS} value={metric} onChange={setMetric} />
       }

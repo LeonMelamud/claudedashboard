@@ -1,27 +1,43 @@
 import { DateTime } from 'luxon';
 import type { Granularity, HeatmapHour } from '@dash/shared';
 
-export const DISPLAY_ZONE = 'Asia/Jerusalem';
+const FALLBACK_ZONE = 'Asia/Jerusalem';
+
+/**
+ * The zone the server keys its daily tables by (ORG_TIMEZONE), reported through
+ * /api/settings and set once on load. Until then the default holds — every
+ * consumer reads it through `displayZone()` so a later arrival is picked up.
+ */
+let zone = FALLBACK_ZONE;
+
+export function setDisplayZone(tz: string | undefined | null): void {
+  if (tz && DateTime.now().setZone(tz).isValid) zone = tz;
+}
+
+export function displayZone(): string {
+  return zone;
+}
 
 /**
  * Now in the display zone — the zone the daily tables are keyed by, so every
  * calendar-day comparison in the UI must start here rather than at UTC (a UTC
- * "today" hides the current day until 03:00 local). Cast to the valid-DateTime
- * type: DISPLAY_ZONE is a fixed IANA zone, so setZone cannot fail.
+ * "today" hides the current day until 03:00 local). The zone is validated in
+ * `setDisplayZone`, so the result is always a valid DateTime.
  */
 export function nowLocal(): DateTime<true> {
-  return DateTime.now().setZone(DISPLAY_ZONE) as DateTime<true>;
+  return DateTime.now().setZone(zone) as DateTime<true>;
 }
 
 export const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 /**
- * Convert a UTC hour bucket ('YYYY-MM-DDTHH:00:00Z') to the Jerusalem-local
- * weekday/hour. DST-aware per date because luxon converts the actual instant.
+ * Convert a UTC hour bucket ('YYYY-MM-DDTHH:00:00Z') to the weekday/hour in the
+ * display zone (ORG_TIMEZONE, see `setDisplayZone`). DST-aware in any zone
+ * because luxon converts the actual instant, not the wall clock.
  * weekday: 0=Sun … 6=Sat.
  */
-export function utcHourToJerusalem(hourUtc: string): { weekday: number; hour: number } {
-  const dt = DateTime.fromISO(hourUtc, { zone: 'utc' }).setZone(DISPLAY_ZONE);
+export function utcHourToLocal(hourUtc: string): { weekday: number; hour: number } {
+  const dt = DateTime.fromISO(hourUtc, { zone: 'utc' }).setZone(zone);
   // luxon: 1=Mon … 7=Sun → 0=Sun … 6=Sat
   return { weekday: dt.weekday % 7, hour: dt.hour };
 }
@@ -44,7 +60,7 @@ export function binHeatmap(
   const abs: number[][] = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
   let total = 0;
   for (const h of hours) {
-    const { weekday, hour } = utcHourToJerusalem(h.hourUtc);
+    const { weekday, hour } = utcHourToLocal(h.hourUtc);
     const v = value(h);
     const row = abs[weekday];
     if (row) row[hour] = (row[hour] ?? 0) + v;
