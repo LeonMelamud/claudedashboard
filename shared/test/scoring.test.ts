@@ -11,7 +11,8 @@ import {
 import { computeBadges } from '../src/scoring/badges.js';
 import {
   bestWorkdayStreak,
-  ilDateOfIso,
+  localDateOf,
+  utcHourRangeOfLocalDays,
   currentWorkdayStreak,
   isWorkday,
   workdaysBetween,
@@ -69,14 +70,44 @@ describe('percentile', () => {
 });
 
 describe('workweek (Israel, Sun–Thu)', () => {
-  it('buckets days in Israel local time, not UTC', () => {
+  it('buckets days in org-local time, not UTC', () => {
     // 2026-07-28 22:30 UTC = 2026-07-29 01:30 in Jerusalem (UTC+3) — late-night
     // work belongs to the NEW day, or the new day looks empty and streaks break.
-    expect(ilDateOfIso('2026-07-28T22:30:00Z')).toBe('2026-07-29');
-    expect(ilDateOfIso('2026-07-28T20:59:00Z')).toBe('2026-07-28');
+    expect(localDateOf('2026-07-28T22:30:00Z')).toBe('2026-07-29');
+    expect(localDateOf('2026-07-28T20:59:00Z')).toBe('2026-07-28');
     // winter: UTC+2
-    expect(ilDateOfIso('2026-01-14T22:30:00Z')).toBe('2026-01-15');
-    expect(ilDateOfIso('2026-01-14T21:30:00Z')).toBe('2026-01-14');
+    expect(localDateOf('2026-01-14T22:30:00Z')).toBe('2026-01-15');
+    expect(localDateOf('2026-01-14T21:30:00Z')).toBe('2026-01-14');
+    // zero-padded, always YYYY-MM-DD — this string becomes a database key, so
+    // it must never inherit a locale's date pattern
+    expect(localDateOf('2026-01-02T12:00:00Z')).toBe('2026-01-02');
+    expect(localDateOf('2026-01-02T12:00:00Z', 'UTC')).toBe('2026-01-02');
+    expect(localDateOf('2026-01-02T00:30:00Z', 'UTC')).toBe('2026-01-02');
+    expect(localDateOf('2026-01-02T00:30:00Z', 'America/New_York')).toBe('2026-01-01');
+    expect(() => localDateOf('not-a-date')).toThrow(RangeError);
+  });
+
+  it('converts a local-day range into the UTC hours that actually cover it', () => {
+    // hour tables are UTC; pasting 'T00:00:00Z' onto a local date would drop the
+    // range's first 3 local hours and leak 3 from the day after `to`
+    expect(utcHourRangeOfLocalDays('2026-07-05', '2026-07-11')).toEqual({
+      fromHour: '2026-07-04T21:00:00Z', // 00:00 Sun in Jerusalem, UTC+3
+      toHour: '2026-07-11T20:00:00Z', // 23:00 Sat in Jerusalem
+    });
+    // winter is UTC+2
+    expect(utcHourRangeOfLocalDays('2026-01-04', '2026-01-10')).toEqual({
+      fromHour: '2026-01-03T22:00:00Z',
+      toHour: '2026-01-10T21:00:00Z',
+    });
+    // a range that straddles the DST switch gets each end in its own offset
+    expect(utcHourRangeOfLocalDays('2026-03-25', '2026-04-01')).toEqual({
+      fromHour: '2026-03-24T22:00:00Z',
+      toHour: '2026-04-01T20:00:00Z',
+    });
+    expect(utcHourRangeOfLocalDays('2026-07-05', '2026-07-11', 'UTC')).toEqual({
+      fromHour: '2026-07-05T00:00:00Z',
+      toHour: '2026-07-11T23:00:00Z',
+    });
   });
   it('classifies weekdays: Fri/Sat are weekend', () => {
     expect(isWorkday('2026-07-05')).toBe(true); // Sunday

@@ -20,7 +20,7 @@ import {
   Wallet,
   Wrench,
 } from 'lucide-react';
-import { useCapabilities } from '@/lib/queries';
+import { useCapabilities, useSettings } from '@/lib/queries';
 import { useThemeStore } from '@/state/theme';
 import { usePersonaStore } from '@/state/persona';
 import { usePrefsStore } from '@/state/prefs';
@@ -31,6 +31,7 @@ import { SyncPill } from '@/components/SyncPill';
 import { PersonaSwitcher } from '@/components/PersonaSwitcher';
 import { Toaster } from '@/components/Toaster';
 import { Tip } from '@/components/ui';
+import { setDisplayZone } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -111,6 +112,11 @@ export function AppShell() {
   const [guideOpen, setGuideOpen] = useState(false);
   const caps = useCapabilities().data?.capabilities;
   const nav = useMemo(() => mainNav(caps), [caps]);
+
+  // the server keys its daily tables by ORG_TIMEZONE — every calendar-day
+  // comparison in the UI has to agree with it
+  const serverZone = useSettings().data?.displayTimezone;
+  useEffect(() => setDisplayZone(serverZone), [serverZone]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

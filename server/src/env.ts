@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { DataSourceDto, PrivacyMode } from '@dash/shared';
+import { DEFAULT_ORG_TIMEZONE, type DataSourceDto, type PrivacyMode } from '@dash/shared';
 import { z } from 'zod';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -87,8 +87,15 @@ const schema = z.object({
   WEB_DIST_PATH: z.preprocess(emptyToUndef, z.string().default('web/dist')),
   /** When set, POST /otel/* requires `Authorization: Bearer <token>`. */
   OTEL_INGEST_TOKEN: z.preprocess(emptyToUndef, z.string().optional()),
-  /** max OTLP batch size; Fastify's 1 MiB default silently 413s busy exporters */
-  OTEL_MAX_BODY_MB: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(512).default(32)),
+  /**
+   * Max OTLP batch size. Fastify's 1 MiB default silently 413s busy exporters;
+   * every accepted byte is JSON.parsed synchronously, so this is also the DoS
+   * surface of an unauthenticated receiver — raise it only as far as the
+   * otel_batch_too_large counter says you need.
+   */
+  OTEL_MAX_BODY_MB: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(512).default(8)),
+  /** IANA zone the daily tables are keyed by, and the org work-week's zone. */
+  ORG_TIMEZONE: z.preprocess(emptyToUndef, z.string().default(DEFAULT_ORG_TIMEZONE)),
   /** Explicit data-source override; keys are still validated per source. */
   DATA_SOURCE: z.preprocess(emptyToUndef, z.enum(['demo', 'telemetry', 'console', 'enterprise']).optional()),
   /** How much detail the OTel receiver keeps (see otel/privacy.ts). */
@@ -123,6 +130,7 @@ export interface Env {
   webDistPath: string;
   otelIngestToken: string | null;
   otelMaxBodyBytes: number;
+  orgTimezone: string;
 }
 
 export function loadEnv(): Env {
@@ -157,6 +165,17 @@ export function loadEnv(): Env {
     console.warn(
       'warning: telemetry mode without OTEL_INGEST_TOKEN — the OTLP receiver accepts unauthenticated POSTs; set OTEL_INGEST_TOKEN outside trusted networks',
     );
+    if (p.OTEL_MAX_BODY_MB > 8) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `warning: OTEL_MAX_BODY_MB=${p.OTEL_MAX_BODY_MB} on an unauthenticated receiver — anyone who can reach it can make the server parse ${p.OTEL_MAX_BODY_MB} MiB of JSON per request`,
+      );
+    }
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: p.ORG_TIMEZONE });
+  } catch {
+    throw new Error(`ORG_TIMEZONE is not a valid IANA zone: ${p.ORG_TIMEZONE}`);
   }
   return {
     dataSource,
@@ -177,5 +196,6 @@ export function loadEnv(): Env {
     webDistPath: resolveFromRepoRoot(p.WEB_DIST_PATH),
     otelIngestToken: p.OTEL_INGEST_TOKEN ?? null,
     otelMaxBodyBytes: p.OTEL_MAX_BODY_MB * 1024 * 1024,
+    orgTimezone: p.ORG_TIMEZONE,
   };
 }

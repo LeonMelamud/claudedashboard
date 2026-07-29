@@ -11,7 +11,7 @@ import {
 import type { Repos } from '../repos';
 import type { SnapshotRow } from '../repos/syncRepo';
 import { toUserDto } from '../repos/userRepo';
-import { todayIl } from '../util/time';
+import { todayLocal } from '../util/time';
 import { buildLeaderboardData, sortEntries, type RangeParams } from './scoring';
 
 const ADOPTION_GAP_THRESHOLD = 0.3;
@@ -79,7 +79,7 @@ export function getInsights(repos: Repos, q: InsightsQuery): InsightsResponse {
   const range = { from: q.from, to: q.to };
   const data = buildLeaderboardData(repos, range);
   const settings = repos.settings.getMerged();
-  const today = todayIl();
+  const today = todayLocal();
 
   // --- composite rank over the org-wide user-actor leaderboard ---
   const rankedEntries = sortEntries(data.entries.filter((e) => e.user.actorType === 'user'));

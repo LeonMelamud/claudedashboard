@@ -10,7 +10,7 @@ import {
 } from '@dash/shared';
 import type { Repos } from '../repos';
 import type { Granularity } from '../repos/usageRepo';
-import { hourIsoOf, ilHourOfUtc, todayIl } from '../util/time';
+import { hourIsoOf, ilHourOfUtc, todayLocal } from '../util/time';
 import type { RangeParams } from './scoring';
 
 export interface OverviewQuery extends RangeParams {
@@ -114,7 +114,7 @@ export function getOverview(repos: Repos, q: OverviewQuery): OverviewResponse {
 
   // --- partial dates: today (and today-1 just after local midnight), reported
   //     as the start date of any bucket containing a partial day ---
-  const today = todayIl();
+  const today = todayLocal();
   const partialDays: string[] = [];
   const yesterday = addDays(today, -1);
   if (ilHourOfUtc(hourIsoOf(new Date())) < 1 && yesterday >= from && yesterday <= to) {

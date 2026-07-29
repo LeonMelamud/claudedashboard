@@ -1,31 +1,109 @@
 /**
- * Israeli work-week math over 'YYYY-MM-DD' date strings.
+ * Work-week math over 'YYYY-MM-DD' date strings, plus the org-local ⇄ UTC
+ * conversions the daily and hourly tables need.
+ *
  * Workdays are Sunday–Thursday; Friday/Saturday are the weekend and NEVER
- * break a streak. Daily dates are Israel-local calendar days (see
- * `ilDateOfIso`, used by the telemetry ingest) — the weekday is a property of
- * the date string itself, no timezone conversion involved here.
+ * break a streak. Daily dates are ORG-LOCAL calendar days (see `localDateOf`,
+ * used by the telemetry ingest) — the weekday is a property of the date string
+ * itself, no timezone conversion involved there. Hour tables stay UTC, so any
+ * hour-bounded query over a local-day range must go through
+ * `utcHourRangeOfLocalDays` rather than pasting 'T00:00:00Z' onto a local date.
+ *
+ * The zone defaults to Asia/Jerusalem and is overridable per call; the server
+ * passes ORG_TIMEZONE. Sun–Thu is still hardcoded — an org on a Mon–Fri week
+ * needs more than a zone.
  */
 
 const DAY_MS = 86_400_000;
 
-const IL_TZ = 'Asia/Jerusalem';
-
-/** en-CA formats as 'YYYY-MM-DD'; Intl handles Israeli DST. */
-const ilDateFmt = new Intl.DateTimeFormat('en-CA', {
-  timeZone: IL_TZ,
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
+export const DEFAULT_ORG_TIMEZONE = 'Asia/Jerusalem';
 
 /**
- * Israel-local calendar day of an instant. The daily bucket MUST be local:
- * everything downstream (Sun–Thu workweek, streaks, active days) is Israeli,
- * so a UTC key files work done after midnight Israel time under the previous
- * day — silently emptying the new day and breaking streaks.
+ * Numeric parts of an instant in `tz`. Formatters are cached per zone and read
+ * through `formatToParts`: a locale's *pattern* is not guaranteed (an ICU build
+ * without en-CA falls back to en-US and yields '07/29/2026'), but the part
+ * values are, and these values become database keys.
  */
-export function ilDateOfIso(iso: string | Date): string {
-  return ilDateFmt.format(typeof iso === 'string' ? new Date(iso) : iso);
+const partsFmtByZone = new Map<string, Intl.DateTimeFormat>();
+
+function partsOf(instant: Date, tz: string): Record<string, number> {
+  let fmt = partsFmtByZone.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    partsFmtByZone.set(tz, fmt);
+  }
+  const out: Record<string, number> = {};
+  for (const p of fmt.formatToParts(instant)) {
+    if (p.type !== 'literal') out[p.type] = Number(p.value);
+  }
+  return out;
+}
+
+const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+
+/**
+ * Org-local calendar day of an instant. The daily bucket MUST be local:
+ * everything downstream (Sun–Thu workweek, streaks, active days) is local, so
+ * a UTC key files work done after midnight local time under the previous day —
+ * silently emptying the new day and breaking streaks.
+ */
+export function localDateOf(instant: string | Date, tz: string = DEFAULT_ORG_TIMEZONE): string {
+  const d = typeof instant === 'string' ? new Date(instant) : instant;
+  if (Number.isNaN(d.getTime())) throw new RangeError(`localDateOf: invalid instant ${String(instant)}`);
+  const p = partsOf(d, tz);
+  // h23 renders midnight as 00, but a stray '24' would still belong to that day
+  return `${pad(p['year'] ?? 0, 4)}-${pad(p['month'] ?? 1)}-${pad(p['day'] ?? 1)}`;
+}
+
+/** ms to add to a UTC instant to get its wall-clock reading in `tz`. */
+function zoneOffsetMs(instantMs: number, tz: string): number {
+  const p = partsOf(new Date(instantMs), tz);
+  const wall = Date.UTC(
+    p['year'] ?? 1970,
+    (p['month'] ?? 1) - 1,
+    p['day'] ?? 1,
+    (p['hour'] ?? 0) % 24,
+    p['minute'] ?? 0,
+    p['second'] ?? 0,
+  );
+  return wall - instantMs;
+}
+
+/** UTC instant of a local wall-clock time, given that time as if it were UTC. */
+function instantOfLocalWall(wallAsUtcMs: number, tz: string): number {
+  // one correction pass, then a second so a DST shift between the guess and the
+  // corrected instant still resolves
+  const guess = wallAsUtcMs - zoneOffsetMs(wallAsUtcMs, tz);
+  return wallAsUtcMs - zoneOffsetMs(guess, tz);
+}
+
+/**
+ * UTC hour buckets ('YYYY-MM-DDTHH:00:00Z') spanning the local days
+ * [from, to] inclusive. The hour tables are keyed by UTC hour while every range
+ * in the app is a local day; string-pasting 'T00:00:00Z' onto a local date
+ * shifts the window by the zone offset, which drops the range's first local
+ * hours and leaks the same number from the day after `to`.
+ */
+export function utcHourRangeOfLocalDays(
+  from: string,
+  to: string,
+  tz: string = DEFAULT_ORG_TIMEZONE,
+): { fromHour: string; toHour: string } {
+  const startMs = instantOfLocalWall(Date.parse(`${from}T00:00:00Z`), tz);
+  const endMs = instantOfLocalWall(Date.parse(`${to}T23:00:00Z`), tz);
+  return {
+    fromHour: `${new Date(startMs).toISOString().slice(0, 13)}:00:00Z`,
+    toHour: `${new Date(endMs).toISOString().slice(0, 13)}:00:00Z`,
+  };
 }
 
 export function toUtcDate(date: string): Date {

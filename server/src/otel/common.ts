@@ -3,8 +3,9 @@
  * timestamp parsing (proto3 JSON mapping, lowerCamelCase keys) plus the
  * email → user resolver used by both the logs and metrics endpoints.
  */
-import { ilDateOfIso } from '@dash/shared';
+import { localDateOf } from '@dash/shared';
 import type { UserRepo } from '../repos/userRepo';
+import { orgTimezone } from '../util/time';
 
 export type AttrValue = string | number | boolean;
 export type AttrMap = Map<string, AttrValue>;
@@ -62,13 +63,13 @@ export function getBool(attrs: AttrMap, key: string): boolean | null {
 }
 
 export interface EventTime {
-  /** 'YYYY-MM-DD' — the ISRAEL-local calendar day the daily tables are keyed by */
+  /** 'YYYY-MM-DD' — the ORG-LOCAL calendar day the daily tables are keyed by */
   date: string;
   /** full ISO, UTC — hour buckets stay UTC and are converted for display */
   iso: string;
 }
 
-/** timeUnixNano (string nanos) → { Israel-local 'YYYY-MM-DD', full UTC ISO }. */
+/** timeUnixNano (string nanos) → { org-local 'YYYY-MM-DD', full UTC ISO }. */
 export function timeOfUnixNano(n: unknown): EventTime | null {
   if (typeof n !== 'string' && typeof n !== 'number') return null;
   try {
@@ -77,7 +78,7 @@ export function timeOfUnixNano(n: unknown): EventTime | null {
     const d = new Date(ms);
     if (Number.isNaN(d.getTime())) return null;
     const iso = d.toISOString();
-    return { date: ilDateOfIso(d), iso };
+    return { date: localDateOf(d, orgTimezone()), iso };
   } catch {
     return null; // non-integer strings, fractions, garbage
   }
@@ -85,9 +86,10 @@ export function timeOfUnixNano(n: unknown): EventTime | null {
 
 const FUTURE_CLAMP_MS = 24 * 3_600_000;
 
-function nowTime(): EventTime {
+/** Server-clock fallback when a record carries no usable timestamp. */
+export function nowEventTime(): EventTime {
   const now = new Date();
-  return { date: ilDateOfIso(now), iso: now.toISOString() };
+  return { date: localDateOf(now, orgTimezone()), iso: now.toISOString() };
 }
 
 /**
@@ -97,8 +99,8 @@ function nowTime(): EventTime {
  */
 export function metricTime(timeUnixNano: unknown, startTimeUnixNano: unknown): EventTime {
   const t = timeOfUnixNano(timeUnixNano) ?? timeOfUnixNano(startTimeUnixNano);
-  if (!t) return nowTime();
-  if (Date.parse(t.iso) > Date.now() + FUTURE_CLAMP_MS) return nowTime();
+  if (!t) return nowEventTime();
+  if (Date.parse(t.iso) > Date.now() + FUTURE_CLAMP_MS) return nowEventTime();
   return t;
 }
 

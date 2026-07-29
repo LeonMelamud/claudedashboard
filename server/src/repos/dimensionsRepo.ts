@@ -1,4 +1,6 @@
+import { utcHourRangeOfLocalDays } from '@dash/shared';
 import type { Db } from '../db/connection';
+import { orgTimezone } from '../util/time';
 
 export interface DimensionUpsertRow {
   date: string;
@@ -117,17 +119,19 @@ export class DimensionsRepo {
   }
 
   webSearchTotal(from: string, to: string): number {
+    const { fromHour, toHour } = utcHourRangeOfLocalDays(from, to, orgTimezone());
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(web_search_requests), 0) AS total
          FROM usage_hourly
          WHERE hour_utc >= ? AND hour_utc <= ?`,
       )
-      .get(`${from}T00:00:00Z`, `${to}T23:00:00Z`) as { total: number };
+      .get(fromHour, toHour) as { total: number };
     return row.total;
   }
 
   webSearchTopUsers(from: string, to: string, limit: number): WebSearchUserRow[] {
+    const { fromHour, toHour } = utcHourRangeOfLocalDays(from, to, orgTimezone());
     return this.db
       .prepare(
         `SELECT h.user_id AS user_id, u.name AS name,
@@ -140,6 +144,6 @@ export class DimensionsRepo {
          ORDER BY requests DESC
          LIMIT ?`,
       )
-      .all(`${from}T00:00:00Z`, `${to}T23:00:00Z`, limit) as WebSearchUserRow[];
+      .all(fromHour, toHour, limit) as WebSearchUserRow[];
   }
 }
