@@ -10,6 +10,7 @@ import {
 } from '../src/scoring/scores.js';
 import { computeBadges } from '../src/scoring/badges.js';
 import {
+  addDays,
   bestWorkdayStreak,
   expectedWeekdays,
   localDateOf,
@@ -180,6 +181,22 @@ describe('workweek (Israel, Sun–Thu)', () => {
     // no expected weekdays at all, but two weeks apart is still two streaks
     expect(bestWorkdayStreak(active, new Set())).toBe(1);
     expect(currentWorkdayStreak(active, '2026-07-20', new Set())).toBe(1);
+  });
+
+  it('current and best enforce the SAME bridge cap', () => {
+    // with no expected weekdays nothing but the cap limits the walk, so this is
+    // where the two implementations drift apart if they disagree by one day
+    const none = new Set<number>();
+    const start = '2026-07-01';
+    for (const gap of [1, 2, 6, 7, 8, 9, 14]) {
+      const end = addDays(start, gap);
+      const active = new Set([start, end]);
+      const current = currentWorkdayStreak(active, end, none);
+      const best = bestWorkdayStreak(active, none);
+      expect(current, `gap of ${gap} days`).toBe(best);
+      // a gap of N days holds N-1 idle days; 6 idle bridge, 7 do not
+      expect(current, `gap of ${gap} days`).toBe(gap <= 7 ? 2 : 1);
+    }
   });
 
   it('falls back to Sun-Thu only when there is no history', () => {

@@ -137,10 +137,12 @@ export function isWorkday(date: string): boolean {
 const EXPECTED_DAY_RATE = 0.5;
 
 /**
- * A week away breaks a streak no matter whose schedule it is. Also bounds the
- * backward walks below for someone with no established pattern yet.
+ * At most this many consecutive IDLE rest days can be bridged — a full week
+ * away breaks a streak no matter whose schedule it is. Also bounds the backward
+ * walk for someone with no established pattern yet. Both streak functions must
+ * enforce the same number, or `current` can exceed `best` over the same set.
  */
-const MAX_BRIDGE_DAYS = 7;
+const MAX_IDLE_BRIDGE_DAYS = 6;
 
 /**
  * The weekdays this person is expected to work, learned from their own history
@@ -195,22 +197,25 @@ export function daysBetween(from: string, to: string): number {
 }
 
 /**
- * Walk back from `date` over days that don't count against the person: an idle
- * day they weren't expected to work. An active day always counts (work a
- * Saturday and the Saturday counts), an idle expected day stops the walk (it
- * breaks the streak), and more than a week of idling stops it regardless.
+ * Walk back from `date` to the first day that decides the streak: one the person
+ * was active on (any day they worked counts, Saturday included), or one they
+ * were expected to work — idle there, and the streak is over. Idle rest days in
+ * between are skipped, up to MAX_IDLE_BRIDGE_DAYS of them.
+ *
+ * Returns null once the cap is exhausted, so every day the caller sees has been
+ * checked; returning the unchecked cursor instead let an eighth day bridge.
  */
-function skipIdleRestDays(
+function decidingDayAtOrBefore(
   activeDates: ReadonlySet<string>,
   expected: ReadonlySet<number>,
   date: string,
-): string {
+): string | null {
   let cursor = date;
-  for (let skipped = 0; skipped < MAX_BRIDGE_DAYS; skipped++) {
+  for (let skipped = 0; skipped <= MAX_IDLE_BRIDGE_DAYS; skipped++) {
     if (activeDates.has(cursor) || expected.has(weekdayOf(cursor))) return cursor;
     cursor = addDays(cursor, -1);
   }
-  return cursor;
+  return null;
 }
 
 /**
@@ -226,22 +231,23 @@ export function currentWorkdayStreak(
   asOf: string,
   expected: ReadonlySet<number> = DEFAULT_WORKWEEK,
 ): number {
-  let cursor = skipIdleRestDays(activeDates, expected, asOf);
-  if (!activeDates.has(cursor)) {
+  let cursor = decidingDayAtOrBefore(activeDates, expected, asOf);
+  if (cursor !== null && !activeDates.has(cursor)) {
     // grace only when the missing day is asOf itself (or the rewind of it)
-    cursor = skipIdleRestDays(activeDates, expected, addDays(cursor, -1));
+    cursor = decidingDayAtOrBefore(activeDates, expected, addDays(cursor, -1));
   }
   let streak = 0;
-  while (activeDates.has(cursor)) {
+  while (cursor !== null && activeDates.has(cursor)) {
     streak++;
-    cursor = skipIdleRestDays(activeDates, expected, addDays(cursor, -1));
+    cursor = decidingDayAtOrBefore(activeDates, expected, addDays(cursor, -1));
   }
   return streak;
 }
 
 /**
  * Longest run of active days anywhere in the set, bridging only the person's own
- * idle rest days (and never more than a week).
+ * idle rest days — the same cap `currentWorkdayStreak` enforces, so the two can
+ * never disagree about whether a gap is contiguous.
  */
 export function bestWorkdayStreak(
   activeDates: ReadonlySet<string>,
@@ -254,7 +260,8 @@ export function bestWorkdayStreak(
   let prev: string | null = null;
   for (const date of sorted) {
     // contiguous when every day between prev and date was an idle rest day
-    let contiguous = prev !== null && daysBetween(prev, date) <= MAX_BRIDGE_DAYS;
+    // a gap of N days has N-1 idle days in it
+    let contiguous = prev !== null && daysBetween(prev, date) <= MAX_IDLE_BRIDGE_DAYS + 1;
     if (contiguous && prev !== null) {
       for (let d = addDays(prev, 1); d < date; d = addDays(d, 1)) {
         if (expected.has(weekdayOf(d))) {
