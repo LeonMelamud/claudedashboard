@@ -11,6 +11,7 @@ import {
 import { computeBadges } from '../src/scoring/badges.js';
 import {
   bestWorkdayStreak,
+  expectedWeekdays,
   localDateOf,
   utcHourRangeOfLocalDays,
   currentWorkdayStreak,
@@ -142,6 +143,49 @@ describe('workweek (Israel, Sun–Thu)', () => {
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-12', '2026-07-13']);
     expect(bestWorkdayStreak(active)).toBe(4);
   });
+  it('learns each person\'s work week instead of assuming one', () => {
+    // Jul 2026: 1st is a Wednesday. A US schedule: every Mon-Fri, never a weekend.
+    const usDates = new Set<string>();
+    for (const d of ['06', '07', '08', '09', '10', '13', '14', '15', '16', '17', '20', '21', '22', '23', '24']) {
+      usDates.add(`2026-07-${d}`); // Mon-Fri x3 weeks
+    }
+    const us = expectedWeekdays(usDates, '2026-07-06', '2026-07-24');
+    expect([...us].sort()).toEqual([1, 2, 3, 4, 5]); // Mon-Fri, no Sunday
+    // ...so their idle Sunday does not break the streak, which the Sun-Thu
+    // assumption did on every single week
+    expect(currentWorkdayStreak(usDates, '2026-07-24', us)).toBe(15);
+
+    // An Israeli schedule over the same window: every Sun-Thu.
+    const ilDates = new Set<string>();
+    for (const d of ['05', '06', '07', '08', '09', '12', '13', '14', '15', '16', '19', '20', '21', '22', '23']) {
+      ilDates.add(`2026-07-${d}`);
+    }
+    const il = expectedWeekdays(ilDates, '2026-07-05', '2026-07-23');
+    expect([...il].sort()).toEqual([0, 1, 2, 3, 4]); // Sun-Thu
+    expect(currentWorkdayStreak(ilDates, '2026-07-23', il)).toBe(15);
+
+    // Someone who works most Saturdays: Saturday is one of their work days, so
+    // it counts when worked — and an idle one does break the run.
+    const sixDay = new Set(
+      ['04', '05', '06', '07', '08', '09', '11', '12', '13', '14', '15', '16', '18', '19', '20', '21', '22', '23', '25'].map(
+        (d) => `2026-07-${d}`,
+      ),
+    );
+    expect(expectedWeekdays(sixDay, '2026-07-04', '2026-07-25').has(6)).toBe(true);
+    expect(expectedWeekdays(sixDay, '2026-07-04', '2026-07-25').has(5)).toBe(false); // never a Friday
+  });
+
+  it('never bridges more than a week away', () => {
+    const active = new Set(['2026-07-06', '2026-07-20']);
+    // no expected weekdays at all, but two weeks apart is still two streaks
+    expect(bestWorkdayStreak(active, new Set())).toBe(1);
+    expect(currentWorkdayStreak(active, '2026-07-20', new Set())).toBe(1);
+  });
+
+  it('falls back to Sun-Thu only when there is no history', () => {
+    expect([...expectedWeekdays(new Set(), '2026-07-05', '2026-07-11')].sort()).toEqual([0, 1, 2, 3, 4]);
+  });
+
   it('an active Fri/Sat counts as a streak day', () => {
     // Mon..Sat active, asOf Sat — the weekend was worked, so it counts
     const active = new Set([

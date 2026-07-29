@@ -51,21 +51,21 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     name: 'Streak · Bronze',
     emoji: '🥉',
     description: 'A full working week with Claude, every day.',
-    rule: 'Best run of 5 consecutive active days in the last 90 (idle Fri/Sat never break a streak; working them counts).',
+    rule: 'Best run of 5 active days in a row in the last 90, measured against your own work week — days you don\'t normally work never break it, and days you do work always count.',
   },
   streak_silver: {
     id: 'streak_silver',
     name: 'Streak · Silver',
     emoji: '🥈',
     description: 'Two straight weeks of daily Claude work.',
-    rule: 'Best run of 10 consecutive active days in the last 90.',
+    rule: 'Best run of 10 active days in a row in the last 90, on your own work week.',
   },
   streak_gold: {
     id: 'streak_gold',
     name: 'Streak · Gold',
     emoji: '🥇',
     description: 'A whole month of showing up, every single workday.',
-    rule: 'Best run of 20 consecutive active days in the last 90.',
+    rule: 'Best run of 20 active days in a row in the last 90, on your own work week.',
   },
   polyglot: {
     id: 'polyglot',
@@ -354,7 +354,7 @@ export const METRIC_GUIDE: Record<string, { name: string; formula: string; expla
     name: 'Activity calendar',
     formula: 'one cell per day, colored by sessions / net lines / cost',
     explanation:
-      'A year of activity at a glance. Idle Fridays and Saturdays never break a streak — and working them extends it.',
+      'A year of activity at a glance. Streaks follow your own work week — a day off that you never work doesn\u2019t break one, and a weekend you did work counts.',
   },
   badgeCase: {
     name: 'Badge case',
@@ -386,9 +386,9 @@ export const METRIC_GUIDE: Record<string, { name: string; formula: string; expla
   },
   streak: {
     name: 'Streak',
-    formula: 'consecutive active days, idle Fri/Sat bridged (trailing 90 days)',
+    formula: 'active days in a row, your own days off bridged (trailing 90 days)',
     explanation:
-      'An idle weekend never breaks it, and a weekend you did work counts as a streak day. Today gets grace until it ends — an inactive today doesn’t reset you.',
+      'Your work week is learned from your own history — whichever weekdays you actually work at least half the time. Sun–Thu, Mon–Fri or six days a week all measure the same way: a day off you never work never breaks the run, a day you do work always counts, and more than a week away breaks it. Today gets grace until it ends — an inactive today doesn’t reset you.',
   },
   skillsUsage: {
     name: 'Skills usage',
