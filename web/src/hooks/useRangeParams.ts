@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DateTime } from 'luxon';
 import type { Granularity } from '@dash/shared';
+import { nowLocal } from '@/lib/time';
 
 export type RangePreset = '7d' | '30d' | '90d' | 'qtd' | 'custom';
 
@@ -14,7 +15,9 @@ export const RANGE_PRESETS: Array<{ id: RangePreset; label: string }> = [
 ];
 
 function presetRange(preset: RangePreset, fromParam: string | null, toParam: string | null) {
-  const today = DateTime.utc().startOf('day');
+  // the org-local day, matching how the daily tables are keyed — a UTC
+  // 'today' hides the current day until 03:00 local time
+  const today = nowLocal().startOf('day');
   const to = today.toISODate();
   switch (preset) {
     case '7d':

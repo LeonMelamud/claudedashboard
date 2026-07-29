@@ -3,6 +3,16 @@ import type { Granularity, HeatmapHour } from '@dash/shared';
 
 export const DISPLAY_ZONE = 'Asia/Jerusalem';
 
+/**
+ * Now in the display zone — the zone the daily tables are keyed by, so every
+ * calendar-day comparison in the UI must start here rather than at UTC (a UTC
+ * "today" hides the current day until 03:00 local). Cast to the valid-DateTime
+ * type: DISPLAY_ZONE is a fixed IANA zone, so setZone cannot fail.
+ */
+export function nowLocal(): DateTime<true> {
+  return DateTime.now().setZone(DISPLAY_ZONE) as DateTime<true>;
+}
+
 export const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 /**
@@ -95,6 +105,7 @@ export function maxBy<T>(rows: T[], f: (r: T) => number): number {
   return rows.reduce((acc, r) => Math.max(acc, f(r)), 0);
 }
 
-export function todayUtc(): string {
-  return DateTime.utc().toISODate();
+/** Today's 'YYYY-MM-DD' in the display zone. */
+export function todayLocal(): string {
+  return nowLocal().toISODate();
 }

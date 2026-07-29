@@ -11,6 +11,7 @@ import {
 import { computeBadges } from '../src/scoring/badges.js';
 import {
   bestWorkdayStreak,
+  ilDateOfIso,
   currentWorkdayStreak,
   isWorkday,
   workdaysBetween,
@@ -34,6 +35,7 @@ function makeInput(overrides: Partial<ScoringInput> = {}): ScoringInput {
     nightShare: 0.05,
     earlyShare: 0.1,
     currentStreak: 6,
+    bestStreak: 6,
     ...overrides,
   };
 }
@@ -67,6 +69,15 @@ describe('percentile', () => {
 });
 
 describe('workweek (Israel, Sun–Thu)', () => {
+  it('buckets days in Israel local time, not UTC', () => {
+    // 2026-07-28 22:30 UTC = 2026-07-29 01:30 in Jerusalem (UTC+3) — late-night
+    // work belongs to the NEW day, or the new day looks empty and streaks break.
+    expect(ilDateOfIso('2026-07-28T22:30:00Z')).toBe('2026-07-29');
+    expect(ilDateOfIso('2026-07-28T20:59:00Z')).toBe('2026-07-28');
+    // winter: UTC+2
+    expect(ilDateOfIso('2026-01-14T22:30:00Z')).toBe('2026-01-15');
+    expect(ilDateOfIso('2026-01-14T21:30:00Z')).toBe('2026-01-14');
+  });
   it('classifies weekdays: Fri/Sat are weekend', () => {
     expect(isWorkday('2026-07-05')).toBe(true); // Sunday
     expect(isWorkday('2026-07-09')).toBe(true); // Thursday
@@ -99,6 +110,18 @@ describe('workweek (Israel, Sun–Thu)', () => {
   it('best streak spans weekends too', () => {
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-12', '2026-07-13']);
     expect(bestWorkdayStreak(active)).toBe(4);
+  });
+  it('an active Fri/Sat counts as a streak day', () => {
+    // Mon..Sat active, asOf Sat — the weekend was worked, so it counts
+    const active = new Set([
+      '2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24', '2026-07-25',
+    ]);
+    expect(currentWorkdayStreak(active, '2026-07-25')).toBe(6);
+    expect(bestWorkdayStreak(active)).toBe(6);
+    // ...and an idle Sunday after it still breaks the current run
+    active.add('2026-07-27');
+    expect(currentWorkdayStreak(active, '2026-07-27')).toBe(1);
+    expect(bestWorkdayStreak(active)).toBe(6);
   });
 });
 
@@ -235,6 +258,11 @@ describe('badges', () => {
     expect(map.get('night_owl')!.earned).toBe(false);
   });
 
+  it('keeps a streak badge earned after the run breaks', () => {
+    const map = badgesFor(makeInput({ currentStreak: 1, bestStreak: 6 }));
+    expect(map.get('streak_bronze')!.earned).toBe(true);
+    expect(map.get('streak_silver')!.earned).toBe(false);
+  });
   it('streak tiers at 5/10/20', () => {
     const map = badgesFor(makeInput({ currentStreak: 11 }));
     expect(map.get('streak_bronze')!.earned).toBe(true);

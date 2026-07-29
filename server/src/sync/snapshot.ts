@@ -1,7 +1,7 @@
 import { addDays } from '@dash/shared';
 import type { Repos } from '../repos';
 import { buildLeaderboardData } from '../services/scoring';
-import { todayUtc } from '../util/time';
+import { todayIl } from '../util/time';
 
 export const SNAPSHOT_RANGE_KEY = '30d';
 
@@ -11,7 +11,7 @@ export const SNAPSHOT_RANGE_KEY = '30d';
  * Returns the number of snapshots written.
  */
 export function writeSnapshots(repos: Repos): number {
-  const to = todayUtc();
+  const to = todayIl();
   const from = addDays(to, -29);
   const data = buildLeaderboardData(repos, { from, to });
 

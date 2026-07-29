@@ -1,7 +1,18 @@
 /** UTC + Israel-time helpers used by scoring, sync and the seeder. */
+import { ilDateOfIso } from '@dash/shared';
 
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Today in the org's local zone — the zone the daily tables are keyed by (see
+ * `ilDateOfIso`). Any read path that compares against a `date` column must use
+ * this; the Admin-API sync paths keep `todayUtc()` because Anthropic buckets by
+ * UTC day.
+ */
+export function todayIl(): string {
+  return ilDateOfIso(new Date());
 }
 
 export function nowIso(): string {

@@ -50,7 +50,7 @@ export function RangePicker() {
             sideOffset={6}
             className="card pop-in z-50 w-64 space-y-2.5 p-3 shadow-xl"
           >
-            <div className="text-xs font-semibold">Custom range (UTC days)</div>
+            <div className="text-xs font-semibold">Custom range (Israel-local days)</div>
             <label className="block text-[11px] text-muted">
               From
               <input

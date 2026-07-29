@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { DateTime } from 'luxon';
 import type { CalendarDay } from '@dash/shared';
 import { EChart, type EChartsOption } from '@/components/EChart';
 import type { ChartRef } from '@/components/TrendChart';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
 import { fmtCost, fmtNumber, fmtSigned } from '@/lib/format';
+import { nowLocal } from '@/lib/time';
 
 export type CalendarMetric = 'sessions' | 'netLines' | 'cost';
 
@@ -38,8 +38,9 @@ export function ActivityCalendar({
     // netLines is signed — use a diverging scale centered at 0 so heavy-deletion
     // days read as cool/negative instead of blending into empty cells.
     const diverging = metric === 'netLines';
-    const end = DateTime.utc().toISODate();
-    const start = DateTime.utc().minus({ months: 12 }).plus({ days: 1 }).toISODate();
+    const localToday = nowLocal();
+    const end = localToday.toISODate();
+    const start = localToday.minus({ months: 12 }).plus({ days: 1 }).toISODate();
     return {
       textStyle: { color: t.fg, fontFamily: 'inherit' },
       tooltip: {

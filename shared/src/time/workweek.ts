@@ -1,11 +1,32 @@
 /**
  * Israeli work-week math over 'YYYY-MM-DD' date strings.
  * Workdays are Sunday–Thursday; Friday/Saturday are the weekend and NEVER
- * break a streak. Daily usage dates are UTC calendar days — the weekday is a
- * property of the date string itself, no timezone conversion involved.
+ * break a streak. Daily dates are Israel-local calendar days (see
+ * `ilDateOfIso`, used by the telemetry ingest) — the weekday is a property of
+ * the date string itself, no timezone conversion involved here.
  */
 
 const DAY_MS = 86_400_000;
+
+const IL_TZ = 'Asia/Jerusalem';
+
+/** en-CA formats as 'YYYY-MM-DD'; Intl handles Israeli DST. */
+const ilDateFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: IL_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * Israel-local calendar day of an instant. The daily bucket MUST be local:
+ * everything downstream (Sun–Thu workweek, streaks, active days) is Israeli,
+ * so a UTC key files work done after midnight Israel time under the previous
+ * day — silently emptying the new day and breaking streaks.
+ */
+export function ilDateOfIso(iso: string | Date): string {
+  return ilDateFmt.format(typeof iso === 'string' ? new Date(iso) : iso);
+}
 
 export function toUtcDate(date: string): Date {
   return new Date(`${date}T00:00:00Z`);
@@ -45,48 +66,56 @@ export function daysBetween(from: string, to: string): number {
 }
 
 /**
- * Current streak of consecutive active WORKDAYS ending at (or just before)
- * `asOf`. Fri/Sat are skipped transparently. If `asOf` itself is a workday
- * with no activity yet (e.g. today, partial data), it is granted grace: the
- * streak is measured ending at the previous workday instead — but only one
- * such grace day, and only for `asOf` itself.
+ * Walk back from `date` over days that don't count: an IDLE Fri/Sat. An active
+ * Fri/Sat counts (working the weekend extends a streak), an idle workday stops
+ * the walk (it breaks the streak).
+ */
+function skipIdleWeekend(activeDates: ReadonlySet<string>, date: string): string {
+  let cursor = date;
+  while (!activeDates.has(cursor) && !isWorkday(cursor)) cursor = addDays(cursor, -1);
+  return cursor;
+}
+
+/**
+ * Current streak of consecutive active days ending at (or just before) `asOf`.
+ * Idle Fri/Sat are skipped transparently; an ACTIVE Fri/Sat counts as a streak
+ * day. If the last counting day is idle (e.g. today, partial data), it is
+ * granted grace: the streak is measured ending one counting day earlier — but
+ * only one such grace day, and only for `asOf` itself.
  */
 export function currentWorkdayStreak(activeDates: ReadonlySet<string>, asOf: string): number {
-  let cursor = asOf;
-  // rewind weekend to the preceding workday
-  while (!isWorkday(cursor)) cursor = addDays(cursor, -1);
+  let cursor = skipIdleWeekend(activeDates, asOf);
   if (!activeDates.has(cursor)) {
     // grace only when the missing day is asOf itself (or the weekend rewind of it)
-    let prev = addDays(cursor, -1);
-    while (!isWorkday(prev)) prev = addDays(prev, -1);
-    cursor = prev;
+    cursor = skipIdleWeekend(activeDates, addDays(cursor, -1));
   }
   let streak = 0;
   while (activeDates.has(cursor)) {
     streak++;
-    let prev = addDays(cursor, -1);
-    while (!isWorkday(prev)) prev = addDays(prev, -1);
-    cursor = prev;
+    cursor = skipIdleWeekend(activeDates, addDays(cursor, -1));
   }
   return streak;
 }
 
-/** Longest run of consecutive active workdays anywhere in the set. */
+/** Longest run of consecutive active days anywhere in the set (idle Fri/Sat bridge). */
 export function bestWorkdayStreak(activeDates: ReadonlySet<string>): number {
   if (activeDates.size === 0) return 0;
-  const sorted = [...activeDates].filter(isWorkday).sort();
+  const sorted = [...activeDates].sort();
   let best = 0;
   let run = 0;
   let prev: string | null = null;
   for (const date of sorted) {
+    // contiguous when every day between prev and date is an idle weekend day
+    let contiguous = prev !== null;
     if (prev !== null) {
-      // next expected workday after prev
-      let expected = addDays(prev, 1);
-      while (!isWorkday(expected)) expected = addDays(expected, 1);
-      run = date === expected ? run + 1 : 1;
-    } else {
-      run = 1;
+      for (let d = addDays(prev, 1); d < date; d = addDays(d, 1)) {
+        if (isWorkday(d)) {
+          contiguous = false;
+          break;
+        }
+      }
     }
+    run = contiguous ? run + 1 : 1;
     if (run > best) best = run;
     prev = date;
   }

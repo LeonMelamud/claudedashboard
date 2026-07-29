@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { DISPLAY_ZONE, nowLocal } from './time';
 
 /** cents → "$12.34" under $100, "$1,234" above. */
 export function fmtCost(cents: number): string {
@@ -56,9 +57,9 @@ export function relativeIso(iso: string | null | undefined): string {
 /** 'YYYY-MM-DD' → "3d ago" / "today" */
 export function relativeDate(date: string | null | undefined): string {
   if (!date) return 'never';
-  const dt = DateTime.fromISO(date, { zone: 'utc' }).startOf('day');
+  const dt = DateTime.fromISO(date, { zone: DISPLAY_ZONE }).startOf('day');
   if (!dt.isValid) return '—';
-  const today = DateTime.utc().startOf('day');
+  const today = nowLocal().startOf('day');
   const days = Math.round(today.diff(dt, 'days').days);
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
@@ -69,9 +70,9 @@ export function relativeDate(date: string | null | undefined): string {
 
 export function daysSince(date: string | null | undefined): number | null {
   if (!date) return null;
-  const dt = DateTime.fromISO(date, { zone: 'utc' }).startOf('day');
+  const dt = DateTime.fromISO(date, { zone: DISPLAY_ZONE }).startOf('day');
   if (!dt.isValid) return null;
-  return Math.round(DateTime.utc().startOf('day').diff(dt, 'days').days);
+  return Math.round(nowLocal().startOf('day').diff(dt, 'days').days);
 }
 
 export function fmtDateShort(date: string): string {

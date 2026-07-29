@@ -51,21 +51,21 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     name: 'Streak · Bronze',
     emoji: '🥉',
     description: 'A full working week with Claude, every day.',
-    rule: '5 consecutive active workdays (Fri/Sat never break a streak).',
+    rule: 'Best run of 5 consecutive active days in the last 90 (idle Fri/Sat never break a streak; working them counts).',
   },
   streak_silver: {
     id: 'streak_silver',
     name: 'Streak · Silver',
     emoji: '🥈',
     description: 'Two straight weeks of daily Claude work.',
-    rule: '10 consecutive active workdays.',
+    rule: 'Best run of 10 consecutive active days in the last 90.',
   },
   streak_gold: {
     id: 'streak_gold',
     name: 'Streak · Gold',
     emoji: '🥇',
     description: 'A whole month of showing up, every single workday.',
-    rule: '20 consecutive active workdays.',
+    rule: 'Best run of 20 consecutive active days in the last 90.',
   },
   polyglot: {
     id: 'polyglot',
@@ -354,7 +354,7 @@ export const METRIC_GUIDE: Record<string, { name: string; formula: string; expla
     name: 'Activity calendar',
     formula: 'one cell per day, colored by sessions / net lines / cost',
     explanation:
-      'A year of activity at a glance. Streaks count Sun–Thu workdays only — Fridays and Saturdays never break a streak.',
+      'A year of activity at a glance. Idle Fridays and Saturdays never break a streak — and working them extends it.',
   },
   badgeCase: {
     name: 'Badge case',
@@ -386,8 +386,9 @@ export const METRIC_GUIDE: Record<string, { name: string; formula: string; expla
   },
   streak: {
     name: 'Streak',
-    formula: 'consecutive active Sun–Thu workdays (trailing 90 days)',
-    explanation: 'Weekends never break it. Today gets grace until it ends — an inactive today doesn’t reset you.',
+    formula: 'consecutive active days, idle Fri/Sat bridged (trailing 90 days)',
+    explanation:
+      'An idle weekend never breaks it, and a weekend you did work counts as a streak day. Today gets grace until it ends — an inactive today doesn’t reset you.',
   },
   skillsUsage: {
     name: 'Skills usage',
