@@ -190,6 +190,7 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       nightShare: hourly && hourly.total > 0 ? hourly.night / hourly.total : null,
       earlyShare: hourly && hourly.total > 0 ? hourly.early / hourly.total : null,
       currentStreak: currentWorkdayStreak(activeDatesByUser.get(userId) ?? new Set(), to),
+      bestStreak: bestWorkdayStreak(activeDatesByUser.get(userId) ?? new Set()),
     });
   }
 
@@ -396,6 +397,7 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
     nightShare: null,
     earlyShare: null,
     currentStreak: currentWorkdayStreak(activeDates, data.range.to),
+    bestStreak: bestWorkdayStreak(activeDates),
   };
   return assembleEntry({
     user: toUserDto(userRow),

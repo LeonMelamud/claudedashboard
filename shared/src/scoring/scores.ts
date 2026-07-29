@@ -28,6 +28,8 @@ export interface ScoringInput {
   earlyShare: number | null;
   /** trailing-90d consecutive active workdays */
   currentStreak: number;
+  /** longest such run inside the trailing 90d — what streak badges are earned on */
+  bestStreak: number;
 }
 
 /** Org-wide baselines, computed ONCE per range over the UNFILTERED nonzero-usage population. */

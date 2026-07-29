@@ -495,18 +495,17 @@ function SkillsAgentsCard({ userId, from, to }: { userId: number; from: string; 
   const noTelemetry = !!data && (!data.hasData || (data.skills.length === 0 && data.agents.length === 0));
 
   const topSkills = useMemo(
-    () => [...(data?.skills ?? [])].sort((a, b) => b.invocations - a.invocations).slice(0, 5),
+    () => [...(data?.skills ?? [])].sort((a, b) => b.invocations - a.invocations),
     [data],
   );
   const maxInvocations = topSkills[0]?.invocations ?? 0;
 
-  const agents = data?.agents ?? [];
-  const agentLine = useMemo(() => {
-    if (agents.length === 0) return null;
-    const parts = [...agents]
-      .sort((a, b) => b.invocations - a.invocations)
-      .slice(0, 3)
-      .map((a) => `${a.subagentType} ×${a.invocations}`);
+  const agents = useMemo(
+    () => [...(data?.agents ?? [])].sort((a, b) => b.invocations - a.invocations),
+    [data],
+  );
+  const maxAgentInvocations = agents[0]?.invocations ?? 0;
+  const agentSuccess = useMemo(() => {
     let weighted = 0;
     let known = 0;
     for (const a of agents) {
@@ -515,8 +514,7 @@ function SkillsAgentsCard({ userId, from, to }: { userId: number; from: string; 
         known += a.invocations;
       }
     }
-    if (known > 0) parts.push(`${Math.round((weighted / known) * 100)}% success`);
-    return parts.join(' · ');
+    return known > 0 ? Math.round((weighted / known) * 100) : null;
   }, [agents]);
 
   return (
@@ -524,7 +522,7 @@ function SkillsAgentsCard({ userId, from, to }: { userId: number; from: string; 
       title="Skills & agents"
       chartId="profile-skills"
       metricKey="skillsUsage"
-      subtitle="From the Claude Code telemetry rollout"
+      subtitle="Everything invoked in the selected date range — change the range to see other dates"
       className="col-span-12"
       noExport
       isLoading={skillsQ.isLoading}
@@ -536,12 +534,12 @@ function SkillsAgentsCard({ userId, from, to }: { userId: number; from: string; 
       <div className="flex flex-col gap-5 py-1 md:flex-row md:items-start">
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted">
-            Top skills
+            Skills ({topSkills.length})
           </div>
           {topSkills.length === 0 ? (
             <div className="text-xs text-muted">No skill invocations in this range.</div>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
               {topSkills.map((s) => (
                 <li key={s.skillName} className="flex items-center gap-2.5">
                   <span
@@ -569,21 +567,42 @@ function SkillsAgentsCard({ userId, from, to }: { userId: number; from: string; 
             </ul>
           )}
         </div>
-        <div className="shrink-0 md:w-72">
+        <div className="min-w-0 shrink-0 md:w-80">
           <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-muted">
-            Subagents
+            Subagents ({agents.length})
           </div>
-          {agentLine ? (
+          {agents.length === 0 ? (
+            <div className="text-xs text-muted">No subagent runs in this range.</div>
+          ) : (
             <>
-              <div className="text-[13px] font-medium">{agentLine}</div>
+              <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                {agents.map((a) => (
+                  <li key={a.subagentType} className="flex items-center gap-2.5">
+                    <span className="w-40 truncate font-mono text-[11.5px]" title={a.subagentType}>
+                      {a.subagentType}
+                    </span>
+                    <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-fg/10">
+                      <span
+                        className="block h-full rounded-full bg-accent"
+                        style={{
+                          width: `${maxAgentInvocations > 0 ? Math.max(2, Math.round((a.invocations / maxAgentInvocations) * 100)) : 0}%`,
+                        }}
+                      />
+                    </span>
+                    <span className="w-12 shrink-0 text-right text-xs text-muted">
+                      {a.invocations.toLocaleString('en-US')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
               {data && (
-                <div className="mt-1 text-[11px] text-muted">
-                  {data.totals.agentInvocations.toLocaleString('en-US')} runs · {fmtCost(data.totals.agentCostCents)}
+                <div className="mt-1.5 text-[11px] text-muted">
+                  {data.totals.agentInvocations.toLocaleString('en-US')} runs ·{' '}
+                  {fmtCost(data.totals.agentCostCents)}
+                  {agentSuccess !== null && ` · ${agentSuccess}% success`}
                 </div>
               )}
             </>
-          ) : (
-            <div className="text-xs text-muted">No subagent runs in this range.</div>
           )}
         </div>
       </div>

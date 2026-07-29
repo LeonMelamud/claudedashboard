@@ -94,11 +94,20 @@ export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): 
     );
   }
 
-  // Streaks (trailing 90d, workdays only)
+  // Streaks — earned on the BEST run in the trailing 90d, so a badge you hit
+  // survives the day you take off; progress still tracks the current run.
   for (const [id, need] of Object.entries(STREAK_TIERS) as Array<
     [keyof typeof STREAK_TIERS, number]
   >) {
-    add(id, i.currentStreak >= need, i.currentStreak / need, `${i.currentStreak} / ${need} workdays`);
+    const best = Math.max(i.bestStreak, i.currentStreak);
+    add(
+      id,
+      best >= need,
+      i.currentStreak / need,
+      best > i.currentStreak
+        ? `${i.currentStreak} now / best ${best} of ${need} days`
+        : `${i.currentStreak} / ${need} days`,
+    );
   }
 
   // Polyglot: >=3 models each with >=5% of personal tokens
