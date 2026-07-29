@@ -15,7 +15,7 @@ import { loadDotEnv, resolveFromRepoRoot } from '../src/env';
 import { createRepos } from '../src/repos';
 import { buildLeaderboardData } from '../src/services/scoring';
 import { SNAPSHOT_RANGE_KEY } from '../src/sync/snapshot';
-import { hourIsoOf, ilHourOfUtc, ilWeekdayOfUtc, nowIso, todayUtc } from '../src/util/time';
+import { hourIsoOf, localHourOfUtc, localWeekdayOfUtc, nowIso, todayUtc } from '../src/util/time';
 
 // ---------------------------------------------------------------------------
 // Seeded PRNG — mulberry32(42), fully deterministic run-to-run
@@ -563,8 +563,8 @@ function main(): void {
       const persona = PERSONAS[dev.kind as Exclude<PersonaKind, 'none'>];
       for (let hb = 0; hb < HOURLY_DAYS * 24; hb++) {
         const iso = hourIsoOf(new Date(nowHourMs - hb * 3_600_000));
-        const ilHour = ilHourOfUtc(iso);
-        const ilWd = ilWeekdayOfUtc(iso);
+        const ilHour = localHourOfUtc(iso);
+        const ilWd = localWeekdayOfUtc(iso);
         const weight = hourWeight(dev.hourProfile, ilHour, ilWd);
         if (!chance(weight * persona.hourlyActivity)) continue;
         const total = Math.round(randInt(20_000, 150_000) * weight);
@@ -1108,7 +1108,7 @@ function main(): void {
       // LiveToday strip has material
       for (let hb = 0; hb < 48; hb++) {
         const iso = hourIsoOf(new Date(nowHourMs - hb * 3_600_000));
-        const weight = hourWeight(dev.hourProfile, ilHourOfUtc(iso), ilWeekdayOfUtc(iso));
+        const weight = hourWeight(dev.hourProfile, localHourOfUtc(iso), localWeekdayOfUtc(iso));
         if (!chance(weight * persona.hourlyActivity)) continue;
         const hourPrompts = Math.max(1, Math.round(randInt(2, 14) * weight));
         insertPackHourly.run(iso, dev.id, hourPrompts, hourPrompts * randInt(2, 6), chance(0.4) ? 1 : 0);

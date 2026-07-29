@@ -43,56 +43,59 @@ export function truncToHourIso(iso: string): string {
   return `${new Date(iso).toISOString().slice(0, 13)}:00:00Z`;
 }
 
-const IL_TZ = 'Asia/Jerusalem';
-
-const hourFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: IL_TZ,
-  hour: 'numeric',
-  hourCycle: 'h23',
-});
-
-const weekdayFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: IL_TZ,
-  weekday: 'short',
-});
-
-const WEEKDAY_INDEX: Record<string, number> = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-};
-
+/**
+ * Hour-of-day in the ORG zone. Night Owl / Early Bird are "what time was it for
+ * you", so this has to follow ORG_TIMEZONE like the daily keys do — computing a
+ * New York team's night in Israeli hours is off by seven.
+ *
+ * The formatter and the memo are both keyed by zone, so `configureOrgTimezone`
+ * during boot (or a different zone in a test) can never serve a stale hour.
+ */
+const hourFmtByZone = new Map<string, Intl.DateTimeFormat>();
 const hourCache = new Map<string, number>();
+
+/** Org-local hour (0-23) of a UTC hour timestamp; DST-correct via Intl. */
+export function localHourOfUtc(hourUtcIso: string): number {
+  const tz = resolvedOrgTimezone;
+  const key = `${tz}|${hourUtcIso}`;
+  let v = hourCache.get(key);
+  if (v === undefined) {
+    let fmt = hourFmtByZone.get(tz);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' });
+      hourFmtByZone.set(tz, fmt);
+    }
+    v = Number(fmt.format(new Date(hourUtcIso))) % 24;
+    hourCache.set(key, v);
+  }
+  return v;
+}
+
+const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+const weekdayFmtByZone = new Map<string, Intl.DateTimeFormat>();
 const weekdayCache = new Map<string, number>();
 
-/** Israel local hour (0-23) of a UTC hour timestamp; DST-correct via Intl. */
-export function ilHourOfUtc(hourUtcIso: string): number {
-  let v = hourCache.get(hourUtcIso);
+/** Org-local weekday (0=Sunday .. 6=Saturday) of a UTC hour timestamp. */
+export function localWeekdayOfUtc(hourUtcIso: string): number {
+  const tz = resolvedOrgTimezone;
+  const key = `${tz}|${hourUtcIso}`;
+  let v = weekdayCache.get(key);
   if (v === undefined) {
-    v = Number(hourFmt.format(new Date(hourUtcIso)));
-    hourCache.set(hourUtcIso, v);
+    let fmt = weekdayFmtByZone.get(tz);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' });
+      weekdayFmtByZone.set(tz, fmt);
+    }
+    v = WEEKDAY_INDEX[fmt.format(new Date(hourUtcIso))] ?? 0;
+    weekdayCache.set(key, v);
   }
   return v;
 }
 
-/** Israel local weekday (0=Sunday .. 6=Saturday) of a UTC hour timestamp. */
-export function ilWeekdayOfUtc(hourUtcIso: string): number {
-  let v = weekdayCache.get(hourUtcIso);
-  if (v === undefined) {
-    v = WEEKDAY_INDEX[weekdayFmt.format(new Date(hourUtcIso))] ?? 0;
-    weekdayCache.set(hourUtcIso, v);
-  }
-  return v;
-}
-
-export function isNightIlHour(h: number): boolean {
+export function isNightHour(h: number): boolean {
   return h >= 22 || h < 5;
 }
 
-export function isEarlyIlHour(h: number): boolean {
+export function isEarlyHour(h: number): boolean {
   return h >= 5 && h < 9;
 }

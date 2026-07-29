@@ -37,14 +37,14 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     name: 'Night Owl',
     emoji: '🦉',
     description: 'Does their best Claude work after dark.',
-    rule: '≥ 30% of activity between 22:00 and 05:00 (Israel time), ≥ 10 active days.',
+    rule: '≥ 30% of activity between 22:00 and 05:00 local time, ≥ 10 active days.',
   },
   early_bird: {
     id: 'early_bird',
     name: 'Early Bird',
     emoji: '🌅',
     description: 'First one in, coffee and Claude before standup.',
-    rule: '≥ 30% of activity between 05:00 and 09:00 (Israel time), ≥ 10 active days.',
+    rule: '≥ 30% of activity between 05:00 and 09:00 local time, ≥ 10 active days.',
   },
   streak_bronze: {
     id: 'streak_bronze',
@@ -317,7 +317,7 @@ export const METRIC_GUIDE: Record<string, { name: string; formula: string; expla
   },
   whenWeWork: {
     name: 'When we work',
-    formula: 'token activity by hour × weekday, Israel time',
+    formula: 'token activity by hour × weekday, local time',
     explanation:
       'When Claude Code is actually in use. Row-normalized mode shows each day’s shape regardless of volume. Covers signed-in (OAuth) usage only — API-key traffic has no per-hour attribution.',
   },

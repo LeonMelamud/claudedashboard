@@ -23,7 +23,7 @@ import {
 } from '@dash/shared';
 import type { Repos } from '../repos';
 import { toUserDto, type UserRow } from '../repos/userRepo';
-import { ilHourOfUtc, isEarlyIlHour, isNightIlHour } from '../util/time';
+import { isEarlyHour, isNightHour, localHourOfUtc } from '../util/time';
 
 export interface RangeParams {
   from: string;
@@ -111,10 +111,10 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       agg = { night: 0, early: 0, total: 0 };
       hourlyByUser.set(row.user_id, agg);
     }
-    const ilHour = ilHourOfUtc(row.hour_utc);
+    const localHour = localHourOfUtc(row.hour_utc);
     agg.total += row.tokens;
-    if (isNightIlHour(ilHour)) agg.night += row.tokens;
-    else if (isEarlyIlHour(ilHour)) agg.early += row.tokens;
+    if (isNightHour(localHour)) agg.night += row.tokens;
+    else if (isEarlyHour(localHour)) agg.early += row.tokens;
   }
 
   const expectedByUserId = new Map<number, ReadonlySet<number>>();
