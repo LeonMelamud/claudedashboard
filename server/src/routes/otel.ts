@@ -17,6 +17,7 @@
  * skipped, never 500.
  */
 import { createHash } from 'node:crypto';
+import { ilDateOfIso } from '@dash/shared';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AppContext } from '../context';
 import {
@@ -328,10 +329,11 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
 
     const time =
       timeOfUnixNano(record['timeUnixNano']) ??
-      timeOfUnixNano(record['observedTimeUnixNano']) ?? {
-        date: new Date().toISOString().slice(0, 10),
-        iso: new Date().toISOString(),
-      };
+      timeOfUnixNano(record['observedTimeUnixNano']) ??
+      (() => {
+        const now = new Date();
+        return { date: ilDateOfIso(now), iso: now.toISOString() };
+      })();
     const { date, iso } = time;
     const hourUtc = hourIsoOfIso(iso);
 
@@ -501,6 +503,19 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
   // Scoped plugin: a JSON parser that also hashes the RAW body, so both /otel
   // endpoints can dedup exporter retries without changing parsing anywhere else.
   await app.register(async (scope) => {
+    // A rejected batch is gone for good — the exporter has no disk buffer and a
+    // retry of the same oversized body fails identically. Fastify's default
+    // 1 MiB is far too small for a busy day with OTEL_LOG_TOOL_DETAILS=1, and
+    // the loss looked like "I worked but the dashboard shows nothing".
+    scope.setErrorHandler((err, req, reply) => {
+      const code = (err as { code?: unknown }).code;
+      const status = (err as { statusCode?: unknown }).statusCode;
+      const tooLarge = code === 'FST_ERR_CTP_BODY_TOO_LARGE' || status === 413;
+      ctx.repos.otel.bumpCounter(tooLarge ? 'otel_batch_too_large' : 'otel_batch_rejected', 1);
+      req.log.error({ err, url: req.url }, 'otel: batch rejected — telemetry lost');
+      void reply.code(typeof status === 'number' && status >= 400 ? status : 400).send({ error: 'rejected' });
+    });
+
     scope.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
       req.rawBodySha256 = createHash('sha256').update(body).digest('hex');
       try {
@@ -512,7 +527,7 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
       }
     });
 
-    scope.post('/otel/v1/logs', async (req, reply) => {
+    scope.post('/otel/v1/logs', { bodyLimit: ctx.env.otelMaxBodyBytes }, async (req, reply) => {
       if (!authorized(req, reply)) return reply;
       const hash = req.rawBodySha256;
       try {
@@ -530,7 +545,7 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
       return {};
     });
 
-    scope.post('/otel/v1/metrics', async (req, reply) => {
+    scope.post('/otel/v1/metrics', { bodyLimit: ctx.env.otelMaxBodyBytes }, async (req, reply) => {
       if (!authorized(req, reply)) return reply;
       const hash = req.rawBodySha256 ?? null;
       try {

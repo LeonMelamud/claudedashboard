@@ -87,6 +87,8 @@ const schema = z.object({
   WEB_DIST_PATH: z.preprocess(emptyToUndef, z.string().default('web/dist')),
   /** When set, POST /otel/* requires `Authorization: Bearer <token>`. */
   OTEL_INGEST_TOKEN: z.preprocess(emptyToUndef, z.string().optional()),
+  /** max OTLP batch size; Fastify's 1 MiB default silently 413s busy exporters */
+  OTEL_MAX_BODY_MB: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(512).default(32)),
   /** Explicit data-source override; keys are still validated per source. */
   DATA_SOURCE: z.preprocess(emptyToUndef, z.enum(['demo', 'telemetry', 'console', 'enterprise']).optional()),
   /** How much detail the OTel receiver keeps (see otel/privacy.ts). */
@@ -120,6 +122,7 @@ export interface Env {
   demoMode: boolean;
   webDistPath: string;
   otelIngestToken: string | null;
+  otelMaxBodyBytes: number;
 }
 
 export function loadEnv(): Env {
@@ -173,5 +176,6 @@ export function loadEnv(): Env {
     demoMode,
     webDistPath: resolveFromRepoRoot(p.WEB_DIST_PATH),
     otelIngestToken: p.OTEL_INGEST_TOKEN ?? null,
+    otelMaxBodyBytes: p.OTEL_MAX_BODY_MB * 1024 * 1024,
   };
 }
