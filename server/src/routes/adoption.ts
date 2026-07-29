@@ -1,7 +1,7 @@
 import { addDays, type AdoptionResponse, type CalendarDay } from '@dash/shared';
 import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../context';
-import { todayIl } from '../util/time';
+import { todayLocal } from '../util/time';
 import { parseRangeQuery } from './shared';
 
 const WAU_DAYS = 7;
@@ -60,7 +60,7 @@ export function registerAdoptionRoutes(app: FastifyInstance, ctx: AppContext): v
     }
 
     // --- org-wide trailing 365-day calendar (profile calendar, no user filter) ---
-    const today = todayIl();
+    const today = todayLocal();
     const calFrom = addDays(today, -(CALENDAR_DAYS - 1));
     const coreByDate = new Map(ctx.repos.usage.orgCalendarCore(calFrom, today).map((r) => [r.date, r]));
     const costByDate = new Map(ctx.repos.usage.orgCalendarCost(calFrom, today).map((r) => [r.date, r.cost_cents]));

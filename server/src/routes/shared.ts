@@ -1,6 +1,6 @@
 import { addDays, type ActorType } from '@dash/shared';
 import { z } from 'zod';
-import { todayIl } from '../util/time';
+import { todayLocal } from '../util/time';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -38,7 +38,7 @@ export function zodMessage(error: z.ZodError): string {
 export function parseRangeQuery(query: unknown): ParsedRangeQuery {
   const parsed = rangeQuerySchema.safeParse(query ?? {});
   if (!parsed.success) throw new BadRequestError(zodMessage(parsed.error));
-  const to = parsed.data.to ?? todayIl();
+  const to = parsed.data.to ?? todayLocal();
   const from = parsed.data.from ?? addDays(to, -29);
   if (from > to) throw new BadRequestError('from must be <= to');
   const out: ParsedRangeQuery = { from, to };

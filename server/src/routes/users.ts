@@ -12,7 +12,7 @@ import { z } from 'zod';
 import type { AppContext } from '../context';
 import { toUserDto, type UserRow } from '../repos/userRepo';
 import { buildLeaderboardData, entryForUser } from '../services/scoring';
-import { todayIl } from '../util/time';
+import { todayLocal } from '../util/time';
 import { parseBody, parseRangeQuery, rangeQuerySchema, zodMessage, BadRequestError } from './shared';
 
 function findUser(ctx: AppContext, idOrEmail: string): UserRow | undefined {
@@ -51,7 +51,7 @@ export function registerUserRoutes(app: FastifyInstance, ctx: AppContext): void 
     }));
 
     // trailing 365 days regardless of the range filter
-    const today = todayIl();
+    const today = todayLocal();
     const calFrom = addDays(today, -364);
     const coreByDate = new Map(ctx.repos.usage.calendarCore(user.id, calFrom, today).map((r) => [r.date, r]));
     const costByDate = new Map(

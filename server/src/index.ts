@@ -13,6 +13,7 @@ import { SyncLogBus } from './sync/logBus';
 import { SyncManager, type SyncPlan } from './sync/manager';
 import { startScheduler } from './sync/schedule';
 import { TelemetrySyncPlan } from './sync/telemetryPlan';
+import { configureOrgTimezone } from './util/time';
 
 /** One plan per data source; demo has none (no scheduler, no API calls). */
 function createSyncPlan(env: Env, repos: Repos, logBus: SyncLogBus): SyncPlan | null {
@@ -48,6 +49,8 @@ const SOURCE_LABEL: Record<Env['dataSource'], string> = {
 
 async function main(): Promise<void> {
   const env = loadEnv();
+  // before any repo/route touches a date key
+  configureOrgTimezone(env.orgTimezone);
 
   const db = openDb(env.dbPath);
   migrate(db);

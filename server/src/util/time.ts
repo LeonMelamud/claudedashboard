@@ -1,18 +1,32 @@
-/** UTC + Israel-time helpers used by scoring, sync and the seeder. */
-import { ilDateOfIso } from '@dash/shared';
+/** UTC + org-local time helpers used by scoring, sync and the seeder. */
+import { DEFAULT_ORG_TIMEZONE, localDateOf } from '@dash/shared';
 
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
 /**
- * Today in the org's local zone — the zone the daily tables are keyed by (see
- * `ilDateOfIso`). Any read path that compares against a `date` column must use
- * this; the Admin-API sync paths keep `todayUtc()` because Anthropic buckets by
- * UTC day.
+ * The zone the daily tables are keyed by. Set ONCE at boot from ORG_TIMEZONE so
+ * pure helpers (and the ingest hot path) can read it without threading env
+ * through every call; defaults to Asia/Jerusalem for anyone who never calls it.
  */
-export function todayIl(): string {
-  return ilDateOfIso(new Date());
+let resolvedOrgTimezone = DEFAULT_ORG_TIMEZONE;
+
+export function configureOrgTimezone(tz: string): void {
+  resolvedOrgTimezone = tz;
+}
+
+export function orgTimezone(): string {
+  return resolvedOrgTimezone;
+}
+
+/**
+ * Today in the org's local zone — the zone the daily tables are keyed by. Any
+ * read path that compares against a `date` column must use this; the Admin-API
+ * sync paths keep `todayUtc()` because Anthropic buckets by UTC day.
+ */
+export function todayLocal(): string {
+  return localDateOf(new Date(), resolvedOrgTimezone);
 }
 
 export function nowIso(): string {
