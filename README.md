@@ -87,6 +87,9 @@ Claude Code ships an OpenTelemetry exporter. Point it at this server and events 
 > [!NOTE]
 > **Coverage**: Claude Code exports telemetry from CLI, IDE-extension (VS Code/JetBrains), and SDK/CI sessions. The Claude Desktop app and claude.ai web sessions don't run the exporter — the dashboard measures coding-surface usage, not all Claude usage.
 
+> [!IMPORTANT]
+> **The exporter has no offline buffer, and this deployment is VPN-only.** If the server is unreachable the batch is retried briefly and then dropped, so work done off-VPN is never recorded and never catches up. Treat gaps as unknown rather than idle — see [Reachability](docs/telemetry-setup.md#reachability-the-server-must-be-up-and-there-is-no-offline-buffer).
+
 The full step-by-step team guide (per-OS paths, verification, troubleshooting) is in **[docs/telemetry-setup.md](docs/telemetry-setup.md)**. The short version — deploy one managed settings file per dev machine (users can't override it):
 
 - macOS: `/Library/Application Support/ClaudeCode/managed-settings.json`

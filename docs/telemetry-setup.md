@@ -16,6 +16,33 @@ Claude Code runs the OTel exporter in its **CLI, IDE-extension (VS Code / JetBra
 
 Read the dashboard accordingly: it measures coding-surface usage, not all Claude usage.
 
+## Reachability: the server must be up, and there is no offline buffer
+
+Claude Code posts OTLP straight to the server. The exporter holds a **bounded
+in-memory queue and no disk spool** — if the endpoint is unreachable it retries
+for a few seconds and then drops the batch. That data is *lost, not queued*: it
+does not arrive later.
+
+> [!IMPORTANT]
+> **This deployment is VPN-only.** The dashboard is reachable from the corporate
+> network only, so **work done off-VPN is never recorded** — no backfill, no
+> catch-up when you reconnect. A blank day on someone's calendar can mean "worked
+> off-VPN", not "didn't work". Read gaps as unknown, not idle.
+
+What helps without changing anything on developer machines: connect to the VPN
+**before** starting Claude Code. If the VPN drops mid-session, reconnecting while
+that session is still open can flush part of the backlog — best-effort, bounded
+by the in-memory queue.
+
+Capturing off-network work would need one of two things, neither of which is in
+place today:
+
+- an **OTel Collector on each machine** with the `file_storage` extension backing
+  a persistent `sending_queue`, forwarding when the VPN returns (records carry
+  their own timestamps, so a late flush still lands on the correct day); or
+- a **reachable ingest endpoint** — `POST /otel/v1/*` exposed over TLS with
+  `OTEL_INGEST_TOKEN` required, dashboard UI kept internal.
+
 ## 1. Decide what you collect: privacy tiers
 
 Set `PRIVACY_MODE` in the server's `.env` (`minimal` | `balanced` | `full`, default `balanced`). Every incoming record is filtered **at ingest, before anything is stored** — the policy is data, executed at a single choke point, and the exact policy object is served at `GET /api/telemetry-policy` and shown to every viewer in the in-app **"What's collected"** transparency dialog.
@@ -146,6 +173,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://<dashboard-host>:8080/ot
 - **Token mismatch.** If the server has `OTEL_INGEST_TOKEN` set, missing/typo'd `OTEL_EXPORTER_OTLP_HEADERS` yields 401s (visible in server logs). The header value format is `Authorization=Bearer <token>`.
 - **Metrics arrive but usage stays empty.** Check the temporality flag — cumulative datapoints are dropped (see `sync_state.otel_metrics_dropped_cumulative`).
 - **Events counted but a page stays empty.** `minimal` mode intentionally buckets names; the Skills page will show `custom_skill`/`mcp_tool` buckets rather than real names.
-- Timestamps are UTC — late-night work can land on the "wrong" calendar day compared to local-time expectations. That's by design.
+- **A day someone worked shows nothing at all.** Most likely they were off-VPN, or the server was down — see [Reachability](#reachability-the-server-must-be-up-and-there-is-no-offline-buffer). Nothing recovers that data. Check `sync_state.otel_batch_too_large` too: if it climbed, batches were rejected for size rather than lost to the network, and raising `OTEL_MAX_BODY_MB` fixes the next one.
+- Daily buckets follow `ORG_TIMEZONE` (default `Asia/Jerusalem`), so work past midnight lands on the day you'd call it. Hour buckets are stored in UTC and converted for display.
 
 Only configured machines send data; the dashboard reflects coverage as the rollout ramps, so partial numbers early on are expected.
