@@ -513,7 +513,9 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
       const tooLarge = code === 'FST_ERR_CTP_BODY_TOO_LARGE' || status === 413;
       ctx.repos.otel.bumpCounter(tooLarge ? 'otel_batch_too_large' : 'otel_batch_rejected', 1);
       req.log.error({ err, url: req.url }, 'otel: batch rejected — telemetry lost');
-      void reply.code(typeof status === 'number' && status >= 400 ? status : 400).send({ error: 'rejected' });
+      // only Fastify's own 4xx is a client error; anything else is ours (500)
+      const reported = typeof status === 'number' && status >= 400 ? status : 500;
+      void reply.code(reported).send({ error: reported >= 500 ? 'internal_error' : 'rejected' });
     });
 
     scope.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
