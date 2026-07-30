@@ -30,6 +30,10 @@ import { cn } from '@/lib/utils';
 const REDACTED_NOTE = 'name redacted by telemetry settings';
 const isRedactedSkill = (name: string) => name === 'custom_skill' || name === 'third-party';
 
+/** Skill names come verbatim from OTEL attributes — escape before tooltip-HTML interpolation. */
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+
 const userPath = (u: Pick<UserSkillRow, 'userId' | 'email'>) =>
   `/user/${encodeURIComponent(u.email ?? String(u.userId))}`;
 
@@ -275,7 +279,7 @@ function TopSkillsCard({
       emptyText={
         noData
           ? 'Waiting for telemetry events'
-          : q
+          : q && rows.length > 0
             ? 'No skills match the filter'
             : 'No skill invocations in this range'
       }
@@ -314,7 +318,7 @@ function TopSkillsChart({
             ? `<div style="margin-top:2px;font-size:10.5px;opacity:.65">${REDACTED_NOTE}</div>`
             : '';
           return (
-            `${p.marker ?? ''}<b>${row.skillName}</b><br/>` +
+            `${p.marker ?? ''}<b>${escapeHtml(row.skillName)}</b><br/>` +
             `Invocations: <b>${fmtNumber(row.invocations)}</b><br/>` +
             `Users: ${fmtNumber(row.users)}<br/>` +
             `Cost: ${fmtCost(row.costCents)}${note}`
@@ -402,7 +406,7 @@ function SkillTriggersChart({ instanceRef, rows }: { instanceRef: ChartRef; rows
           const lines = items
             .filter((p) => typeof p.value === 'number' && p.value > 0)
             .map((p) => `${p.marker ?? ''}${p.seriesName ?? ''}: <b>${fmtNumber(p.value as number)}</b>`);
-          return `<div style="font-size:11px"><b>${name}</b></div>${note}${lines.join('<br/>')}`;
+          return `<div style="font-size:11px"><b>${escapeHtml(name)}</b></div>${note}${lines.join('<br/>')}`;
         },
       },
       legend: { top: 0, right: 0, textStyle: { color: t.muted, fontSize: 10.5 }, icon: 'circle', itemWidth: 8 },
