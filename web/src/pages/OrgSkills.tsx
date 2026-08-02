@@ -30,6 +30,10 @@ import { cn } from '@/lib/utils';
 const REDACTED_NOTE = 'name redacted by telemetry settings';
 const isRedactedSkill = (name: string) => name === 'custom_skill' || name === 'third-party';
 
+/** Skill names come verbatim from OTEL attributes — escape before tooltip-HTML interpolation. */
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+
 const userPath = (u: Pick<UserSkillRow, 'userId' | 'email'>) =>
   `/user/${encodeURIComponent(u.email ?? String(u.userId))}`;
 
@@ -236,30 +240,51 @@ function TopSkillsCard({
   onRetry: () => void;
 }) {
   const [mode, setMode] = useState<SkillMode>('invocations');
+  const [filter, setFilter] = useState('');
+  const q = filter.trim().toLowerCase();
+  const filtered = useMemo(
+    () => (q ? rows.filter((r) => r.skillName.toLowerCase().includes(q)) : rows),
+    [rows, q],
+  );
   return (
     <ChartCard
-      title="Top skills"
+      title="Skills"
       chartId="top-skills"
       metricKey="skillsUsage"
-      subtitle="Slash commands and proactive skill activations"
+      subtitle="All skills in range — slash commands and proactive activations"
       actions={
-        <Segmented
-          size="xs"
-          options={[
-            { id: 'invocations' as const, label: 'Invocations' },
-            { id: 'cost' as const, label: 'Cost' },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
+        <div className="flex items-center gap-2">
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter skills…"
+            aria-label="Filter skills by name"
+            className="w-32 rounded-md border border-border bg-transparent px-2 py-1 text-xs outline-none transition-colors placeholder:text-muted focus:border-accent"
+          />
+          <Segmented
+            size="xs"
+            options={[
+              { id: 'invocations' as const, label: 'Invocations' },
+              { id: 'cost' as const, label: 'Cost' },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+        </div>
       }
       className="col-span-12 lg:col-span-7"
       isLoading={isLoading}
       onRetry={onRetry}
-      isEmpty={noData || rows.length === 0}
-      emptyText={noData ? 'Waiting for telemetry events' : 'No skill invocations in this range'}
+      isEmpty={noData || filtered.length === 0}
+      emptyText={
+        noData
+          ? 'Waiting for telemetry events'
+          : q && rows.length > 0
+            ? 'No skills match the filter'
+            : 'No skill invocations in this range'
+      }
     >
-      {(ref) => <TopSkillsChart instanceRef={ref} rows={rows} mode={mode} />}
+      {(ref) => <TopSkillsChart instanceRef={ref} rows={filtered} mode={mode} />}
     </ChartCard>
   );
 }
@@ -277,10 +302,7 @@ function TopSkillsChart({
   const option = useMemo<EChartsOption>(() => {
     const metric = (r: SkillUsageRow) => (mode === 'cost' ? r.costCents : r.invocations);
     // ascending so the biggest skill renders at the top of the category axis
-    const top = [...rows]
-      .sort((a, b) => metric(b) - metric(a))
-      .slice(0, 12)
-      .reverse();
+    const top = [...rows].sort((a, b) => metric(a) - metric(b));
     const fmtVal = mode === 'cost' ? fmtCost : fmtNumber;
     return {
       textStyle: { color: t.fg, fontFamily: 'inherit' },
@@ -296,7 +318,7 @@ function TopSkillsChart({
             ? `<div style="margin-top:2px;font-size:10.5px;opacity:.65">${REDACTED_NOTE}</div>`
             : '';
           return (
-            `${p.marker ?? ''}<b>${row.skillName}</b><br/>` +
+            `${p.marker ?? ''}<b>${escapeHtml(row.skillName)}</b><br/>` +
             `Invocations: <b>${fmtNumber(row.invocations)}</b><br/>` +
             `Users: ${fmtNumber(row.users)}<br/>` +
             `Cost: ${fmtCost(row.costCents)}${note}`
@@ -343,7 +365,13 @@ function TopSkillsChart({
       ],
     };
   }, [rows, mode, t]);
-  return <EChart option={option} instanceRef={instanceRef} className="h-80" />;
+  // every skill gets a row, so the card grows with the list instead of clipping it
+  const height = Math.max(320, rows.length * 26 + 40);
+  return (
+    <div style={{ height }}>
+      <EChart option={option} instanceRef={instanceRef} className="h-full" />
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -378,7 +406,7 @@ function SkillTriggersChart({ instanceRef, rows }: { instanceRef: ChartRef; rows
           const lines = items
             .filter((p) => typeof p.value === 'number' && p.value > 0)
             .map((p) => `${p.marker ?? ''}${p.seriesName ?? ''}: <b>${fmtNumber(p.value as number)}</b>`);
-          return `<div style="font-size:11px"><b>${name}</b></div>${note}${lines.join('<br/>')}`;
+          return `<div style="font-size:11px"><b>${escapeHtml(name)}</b></div>${note}${lines.join('<br/>')}`;
         },
       },
       legend: { top: 0, right: 0, textStyle: { color: t.muted, fontSize: 10.5 }, icon: 'circle', itemWidth: 8 },
