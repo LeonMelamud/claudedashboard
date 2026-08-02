@@ -33,7 +33,10 @@ const BUILTIN_TOOLS = new Set([
 ]);
 
 /** Keys allowed to survive inside the tool_parameters JSON blob. */
-const TOOL_PARAM_KEEP = ['skill_name', 'subagent_type'] as const;
+const TOOL_PARAM_KEEP = ['skill_name', 'subagent_type', 'mcp_server_name', 'mcp_tool_name'] as const;
+
+/** tool_parameters keys that carry MCP names — dropped entirely in minimal mode. */
+const TOOL_PARAM_MCP = new Set(['mcp_server_name', 'mcp_tool_name']);
 
 const NOTES_COMMON = [
   'prompt and response content are never collected',
@@ -68,7 +71,12 @@ function balancedEvents(): EventPolicy[] {
       'keep',
       { tool_parameters: 'redact' },
     ),
-    ev('tool_decision', 'Which tool was allowed or rejected, and by what (config, hook, user).', 'keep'),
+    ev(
+      'tool_decision',
+      'Which tool was allowed or rejected, and by what (config, hook, user); tool_parameters is filtered to skill/agent/MCP name markers.',
+      'keep',
+      { tool_parameters: 'redact' },
+    ),
     ev('api_request', 'Model, token counts, cost and duration; skill/agent names for cost attribution.', 'keep'),
     ev('api_error', 'Model, status code and duration of failed API calls.', 'keep'),
     ev('skill_activated', 'Skill name and how it was triggered.', 'keep'),
@@ -107,9 +115,9 @@ function minimalEvents(): EventPolicy[] {
     ),
     ev(
       'tool_decision',
-      'Allow/reject decisions with bucketed tool names (built-ins kept, others become custom_tool/mcp_tool).',
+      'Allow/reject decisions with bucketed tool names (built-ins kept, others become custom_tool/mcp_tool); tool_parameters is reduced to bucketed markers.',
       'keep',
-      { tool_name: 'redact' },
+      { tool_name: 'redact', tool_parameters: 'redact' },
     ),
     ev(
       'api_request',
@@ -211,6 +219,8 @@ function redactToolParameters(raw: AttrValue, mode: PrivacyMode): string {
     const v = source[key];
     if (typeof v !== 'string' || v === '') continue;
     if (mode === 'minimal') {
+      // MCP names must not survive minimal (parity with tool_name → 'mcp_tool')
+      if (TOOL_PARAM_MCP.has(key)) continue;
       kept[key] = key === 'skill_name' ? 'custom_skill' : 'custom';
     } else {
       kept[key] = v;
