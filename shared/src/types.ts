@@ -688,6 +688,8 @@ export interface McpToolUsageRow {
   uses: number;
   users: number;
   successRate: number | null;
+  /** denominator behind successRate — calls with a known success/failure outcome, ≤ uses */
+  judged: number;
   accepted: number;
   rejected: number;
 }

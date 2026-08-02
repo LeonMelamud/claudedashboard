@@ -334,7 +334,7 @@ function McpToolsList({
             <span className="w-12 shrink-0 text-right text-xs">{fmtNumber(r.uses)}</span>
             <span className="w-14 shrink-0 text-right text-[10px] text-muted">
               {r.successRate !== null ? (
-                <Tip content={`success rate over ${fmtNumber(r.uses)} calls`}>
+                <Tip content={`success rate over ${fmtNumber(r.judged)} calls`}>
                   <span className={cn(r.successRate < 0.7 && 'font-medium text-risk')}>
                     {fmtPct(r.successRate)} ok
                   </span>

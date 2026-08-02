@@ -15,7 +15,7 @@ import {
   Plug,
   Wrench,
 } from 'lucide-react';
-import { useTeams, useUsers } from '@/lib/queries';
+import { useCapabilities, useTeams, useUsers } from '@/lib/queries';
 import { fuzzyScore, cn } from '@/lib/utils';
 import { Avatar } from '@/components/Avatar';
 
@@ -27,15 +27,17 @@ interface PaletteItem {
   to: string;
   icon?: React.ReactNode;
   email?: string | null;
+  /** hidden unless this capability is truthy — mirrors AppShell's mainNav gating */
+  requires?: 'telemetryPacks' | 'invoiceCosts';
 }
 
 const PAGES: PaletteItem[] = [
   { id: 'p-org', group: 'Pages', label: 'Org Overview', to: '/org', icon: <BarChart3 size={14} /> },
   { id: 'p-insights', group: 'Pages', label: 'Insights', to: '/org/insights', icon: <Lightbulb size={14} /> },
   { id: 'p-skills', group: 'Pages', label: 'Skills & Agents', to: '/org/skills', icon: <Sparkles size={14} /> },
-  { id: 'p-mcp', group: 'Pages', label: 'MCP', to: '/org/mcp', icon: <Plug size={14} /> },
-  { id: 'p-activity', group: 'Pages', label: 'Activity', to: '/org/activity', icon: <Timer size={14} /> },
-  { id: 'p-health', group: 'Pages', label: 'Health', to: '/org/health', icon: <HeartPulse size={14} /> },
+  { id: 'p-mcp', group: 'Pages', label: 'MCP', to: '/org/mcp', icon: <Plug size={14} />, requires: 'telemetryPacks' },
+  { id: 'p-activity', group: 'Pages', label: 'Activity', to: '/org/activity', icon: <Timer size={14} />, requires: 'telemetryPacks' },
+  { id: 'p-health', group: 'Pages', label: 'Health', to: '/org/health', icon: <HeartPulse size={14} />, requires: 'telemetryPacks' },
   { id: 'p-teams', group: 'Pages', label: 'Teams', to: '/teams', icon: <Users size={14} /> },
   { id: 'p-leaderboard', group: 'Pages', label: 'Leaderboard', to: '/leaderboard', icon: <Trophy size={14} /> },
   { id: 'p-admin-teams', group: 'Pages', label: 'Admin · Teams', to: '/admin/teams', icon: <Wrench size={14} /> },
@@ -50,6 +52,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const listRef = useRef<HTMLDivElement>(null);
   const usersQ = useUsers();
   const teamsQ = useTeams();
+  const caps = useCapabilities().data?.capabilities;
 
   useEffect(() => {
     if (open) {
@@ -78,8 +81,9 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         icon: <User size={14} />,
         email: u.email,
       }));
-    return [...PAGES, ...teams, ...users];
-  }, [usersQ.data, teamsQ.data]);
+    const pages = PAGES.filter((p) => !p.requires || caps?.[p.requires] !== false);
+    return [...pages, ...teams, ...users];
+  }, [usersQ.data, teamsQ.data, caps]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return items.slice(0, 30);

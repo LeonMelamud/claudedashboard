@@ -241,6 +241,7 @@ export function registerTelemetryPackRoutes(app: FastifyInstance, ctx: AppContex
           uses: r.uses,
           users: r.users,
           successRate: judged > 0 ? r.success / judged : null,
+          judged,
           accepted: r.accepted,
           rejected: r.rejected,
         };
