@@ -160,6 +160,14 @@ export function useEcosystem(q: RangeQ & { userId?: number | undefined }, enable
   });
 }
 
+/** Telemetry pack: MCP servers / tools / daily trend. */
+export function useMcp(q: RangeQ & { userId?: number | undefined }) {
+  return useQuery({
+    queryKey: packKey('telemetry-mcp', q),
+    queryFn: () => api.telemetryMcp(q),
+  });
+}
+
 export function useBreakdown(
   dimension: BreakdownDimension | null,
   entity: string,
@@ -190,6 +198,7 @@ const DATA_KEYS = [
   'telemetry-reliability',
   'telemetry-governance',
   'telemetry-ecosystem',
+  'telemetry-mcp',
 ];
 
 export function useSyncStatus(refetchMs = 60_000) {
