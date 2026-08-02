@@ -9,6 +9,7 @@ import type {
   DecisionSource,
   EcosystemResponse,
   GovernanceResponse,
+  McpResponse,
   ReliabilityResponse,
 } from '@dash/shared';
 import type { FastifyInstance } from 'fastify';
@@ -212,6 +213,49 @@ export function registerTelemetryPackRoutes(app: FastifyInstance, ctx: AppContex
     };
   });
 
+  const mapMcpServers = (rows: ReturnType<AppContext['repos']['otelPacks']['mcpServers']>) =>
+    rows.map((r) => ({
+      serverName: r.server_name,
+      toolCalls: r.tool_calls,
+      toolFailures: r.tool_failures,
+      tokens: r.tokens,
+      costCents: r.cost_cents,
+      connections: r.connections,
+      connectionFailures: r.connection_failures,
+      users: r.users,
+    }));
+
+  app.get('/api/telemetry/mcp', async (req): Promise<McpResponse> => {
+    const { from, to, scope } = parsePacksQuery(req.query);
+    const repo = packs();
+    const tools = ctx.repos.otel.mcpToolTotals(from, to, scope);
+
+    return {
+      range: { from, to },
+      hasData: repo.hasRows(['otel_mcp_daily'], from, to, scope) || tools.length > 0,
+      servers: mapMcpServers(repo.mcpServers(from, to, scope)),
+      tools: tools.map((r) => {
+        const judged = r.success + r.failure;
+        return {
+          toolName: r.tool_name,
+          uses: r.uses,
+          users: r.users,
+          successRate: judged > 0 ? r.success / judged : null,
+          judged,
+          accepted: r.accepted,
+          rejected: r.rejected,
+        };
+      }),
+      daily: repo.mcpDaily(from, to, scope).map((r) => ({
+        date: r.date,
+        toolCalls: r.tool_calls,
+        toolFailures: r.tool_failures,
+        connections: r.connections,
+        connectionFailures: r.connection_failures,
+      })),
+    };
+  });
+
   app.get('/api/telemetry/ecosystem', async (req): Promise<EcosystemResponse> => {
     const { from, to, scope } = parsePacksQuery(req.query);
     const repo = packs();
@@ -219,16 +263,7 @@ export function registerTelemetryPackRoutes(app: FastifyInstance, ctx: AppContex
     return {
       range: { from, to },
       hasData: repo.hasRows(['otel_mcp_daily', 'otel_plugin_daily', 'otel_token_mix_daily'], from, to, scope),
-      mcpServers: repo.mcpServers(from, to, scope).map((r) => ({
-        serverName: r.server_name,
-        toolCalls: r.tool_calls,
-        toolFailures: r.tool_failures,
-        tokens: r.tokens,
-        costCents: r.cost_cents,
-        connections: r.connections,
-        connectionFailures: r.connection_failures,
-        users: r.users,
-      })),
+      mcpServers: mapMcpServers(repo.mcpServers(from, to, scope)),
       plugins: repo.plugins(from, to, scope).map((r) => ({
         pluginName: r.plugin_name,
         installs: r.installs,

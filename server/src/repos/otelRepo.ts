@@ -187,6 +187,10 @@ export interface ToolTotalsRow {
   rejected: number;
 }
 
+export interface McpToolTotalsRow extends ToolTotalsRow {
+  users: number;
+}
+
 export interface UserRollupRow {
   user_id: number;
   name: string;
@@ -545,6 +549,26 @@ export class OtelRepo {
          LIMIT @limit`,
       )
       .all({ ...scopeParams(from, to, scope), limit }) as ToolTotalsRow[];
+  }
+
+  /** Every MCP tool in range (tool_name 'mcp__server__tool'), uncapped. */
+  mcpToolTotals(from: string, to: string, scope: OtelScope = {}): McpToolTotalsRow[] {
+    const { fromSql, whereSql } = scopeSql('otel_tool_daily', scope);
+    return this.db
+      .prepare(
+        `SELECT t.tool_name AS tool_name,
+                COALESCE(SUM(t.uses), 0) AS uses,
+                COALESCE(SUM(t.success), 0) AS success,
+                COALESCE(SUM(t.failure), 0) AS failure,
+                COALESCE(SUM(t.accepted), 0) AS accepted,
+                COALESCE(SUM(t.rejected), 0) AS rejected,
+                COUNT(DISTINCT t.user_id) AS users
+         FROM ${fromSql}
+         WHERE ${whereSql} AND t.tool_name LIKE 'mcp\\_\\_%' ESCAPE '\\'
+         GROUP BY t.tool_name
+         ORDER BY uses DESC, tool_name`,
+      )
+      .all(scopeParams(from, to, scope)) as McpToolTotalsRow[];
   }
 
   /**

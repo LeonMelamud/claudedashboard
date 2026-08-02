@@ -278,6 +278,21 @@ const DECISION_SOURCE_FIELDS: Record<
   user_reject: 'srcUserReject',
 };
 
+/**
+ * Claude Code ≥2.x emits MCP calls with tool_name='mcp_tool' and the real
+ * names inside tool_parameters ({mcp_server_name, mcp_tool_name}) — even with
+ * OTEL_LOG_TOOL_DETAILS=1. Reconstruct the classic 'mcp__server__tool' so
+ * per-server/per-tool attribution keeps working; older clients that still
+ * send the full name pass through untouched.
+ */
+function resolveMcpToolName(toolName: string, params: Record<string, unknown> | null): string {
+  if (toolName !== 'mcp_tool' || !params) return toolName;
+  const server = params['mcp_server_name'];
+  if (typeof server !== 'string' || server === '') return toolName;
+  const tool = params['mcp_tool_name'];
+  return `mcp__${server}__${typeof tool === 'string' && tool !== '' ? tool : 'unknown'}`;
+}
+
 /** 'mcp__jira__search' → 'jira'; fallback: whole suffix after 'mcp__'. */
 function mcpServerOfToolName(toolName: string): string {
   const rest = toolName.slice('mcp__'.length);
@@ -350,7 +365,8 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
         break;
       }
       case 'claude_code.tool_result': {
-        const toolName = getString(attrs, 'tool_name') ?? 'unknown';
+        const params = parseToolParameters(getString(attrs, 'tool_parameters'));
+        const toolName = resolveMcpToolName(getString(attrs, 'tool_name') ?? 'unknown', params);
         const success = getBool(attrs, 'success');
         const t = agg.tool(date, userId, toolName);
         t.uses += 1;
@@ -359,7 +375,6 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
         // Agent/Task carry the subagent in tool_parameters; Skill stays a
         // tool-only row — skill_activated is the source of truth for skills.
         if (toolName === 'Agent' || toolName === 'Task') {
-          const params = parseToolParameters(getString(attrs, 'tool_parameters'));
           const sub = params && typeof params['subagent_type'] === 'string' && params['subagent_type'] !== ''
             ? (params['subagent_type'] as string)
             : 'unknown';
@@ -379,7 +394,12 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
         break;
       }
       case 'claude_code.tool_decision': {
-        const t = agg.tool(date, userId, getString(attrs, 'tool_name') ?? 'unknown');
+        const decisionParams = parseToolParameters(getString(attrs, 'tool_parameters'));
+        const t = agg.tool(
+          date,
+          userId,
+          resolveMcpToolName(getString(attrs, 'tool_name') ?? 'unknown', decisionParams),
+        );
         const decision = getString(attrs, 'decision');
         if (decision === 'accept') t.accepted += 1;
         else if (decision === 'reject') t.rejected += 1;
@@ -441,14 +461,18 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
         break;
       }
       case 'claude_code.mcp_server_connection': {
+        const success = getBool(attrs, 'success');
+        const status = getString(attrs, 'status')?.toLowerCase() ?? null;
+        // every session ends with a 'disconnected' event per server — lifecycle
+        // noise, not a health signal; counting it as a failure flagged every
+        // clean shutdown as a broken connection.
+        if (status === 'disconnected' && success !== false) break;
         const serverName =
           getString(attrs, 'mcp_server.name') ?? getString(attrs, 'server_name') ?? 'unknown';
         const m = agg.mcpServer(date, userId, serverName);
-        const success = getBool(attrs, 'success');
-        const status = getString(attrs, 'status')?.toLowerCase() ?? null;
         const failed =
           success === false ||
-          (success === null && status !== null && ['failure', 'failed', 'error', 'disconnected'].includes(status));
+          (success === null && status !== null && ['failure', 'failed', 'error'].includes(status));
         if (failed) m.connectionFailures += 1;
         else m.connections += 1;
         break;

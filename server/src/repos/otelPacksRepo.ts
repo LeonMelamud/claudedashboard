@@ -103,6 +103,14 @@ export interface McpServerRow {
   users: number;
 }
 
+export interface McpDailyRow {
+  date: string;
+  tool_calls: number;
+  tool_failures: number;
+  connections: number;
+  connection_failures: number;
+}
+
 export interface PluginRow {
   plugin_name: string;
   installs: number;
@@ -353,6 +361,23 @@ export class OtelPacksRepo {
          ORDER BY tool_calls DESC, server_name`,
       )
       .all(scopeParams(from, to, scope)) as McpServerRow[];
+  }
+
+  mcpDaily(from: string, to: string, scope: OtelScope = {}): McpDailyRow[] {
+    const { fromSql, whereSql } = scopeSql('otel_mcp_daily', scope);
+    return this.db
+      .prepare(
+        `SELECT t.date AS date,
+                COALESCE(SUM(t.tool_calls), 0)          AS tool_calls,
+                COALESCE(SUM(t.tool_failures), 0)       AS tool_failures,
+                COALESCE(SUM(t.connections), 0)         AS connections,
+                COALESCE(SUM(t.connection_failures), 0) AS connection_failures
+         FROM ${fromSql}
+         WHERE ${whereSql}
+         GROUP BY t.date
+         ORDER BY t.date`,
+      )
+      .all(scopeParams(from, to, scope)) as McpDailyRow[];
   }
 
   plugins(from: string, to: string, scope: OtelScope = {}): PluginRow[] {

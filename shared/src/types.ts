@@ -682,6 +682,32 @@ export interface EcosystemResponse {
   modelMix: Array<{ model: string; speed: string; effort: string; tokens: number; costCents: number }>;
 }
 
+export interface McpToolUsageRow {
+  /** full telemetry name, 'mcp__server__tool' */
+  toolName: string;
+  uses: number;
+  users: number;
+  successRate: number | null;
+  /** denominator behind successRate — calls with a known success/failure outcome, ≤ uses */
+  judged: number;
+  accepted: number;
+  rejected: number;
+}
+
+export interface McpResponse {
+  range: DateRange;
+  hasData: boolean;
+  servers: EcosystemResponse['mcpServers'];
+  tools: McpToolUsageRow[];
+  daily: Array<{
+    date: string;
+    toolCalls: number;
+    toolFailures: number;
+    connections: number;
+    connectionFailures: number;
+  }>;
+}
+
 // ---------------------------------------------------------------------------
 // GET /api/breakdown — "who are the users" behind any aggregate count
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import type {
   CostsResponse,
   DimensionsResponse,
   EcosystemResponse,
+  McpResponse,
   GovernanceResponse,
   Granularity,
   HeatmapResponse,
@@ -184,6 +185,12 @@ export const api = {
   telemetryEcosystem: (q: RangeQ & { userId?: number | undefined }) =>
     request<EcosystemResponse>(
       `/api/telemetry/ecosystem${qs({ from: q.from, to: q.to, teamId: q.teamId, userId: q.userId })}`,
+    ),
+
+  /** telemetry packs — MCP servers / tools / daily trend */
+  telemetryMcp: (q: RangeQ & { userId?: number | undefined }) =>
+    request<McpResponse>(
+      `/api/telemetry/mcp${qs({ from: q.from, to: q.to, teamId: q.teamId, userId: q.userId })}`,
     ),
 
   syncStatus: () => request<SyncStatusResponse>('/api/sync/status'),
