@@ -14,8 +14,8 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 5 * 60 * 1000,
       retry: 1,
-      // Dashboards live in a background tab for hours. Mount is otherwise the only
-      // refetch trigger, so a tab left open serves whatever it loaded that morning.
+      // Dashboards may sit in a background tab for hours; without focus refetch,
+      // data can remain stale until a remount or an explicit refetch.
       refetchOnWindowFocus: true,
     },
   },
