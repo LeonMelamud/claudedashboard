@@ -47,20 +47,12 @@ export default function OrgMcp() {
 
             <KpiRow mcp={mcp} loading={mcpQ.isLoading} noData={noData} />
 
-            <ChartCard
-              title="MCP servers"
-              chartId="mcp-servers-page"
-              metricKey="mcpUsage"
-              subtitle="Connected servers — calls, health, and who uses them"
-              infoExtra="Per-server call counts come from MCP-name telemetry; events ingested before the dashboard learned to read them were counted under an anonymous mcp_tool bucket and don’t appear per server."
-              className="col-span-12 lg:col-span-7"
-              noExport
+            <McpServersCard
+              rows={mcp?.servers ?? []}
               isLoading={mcpQ.isLoading}
-              isEmpty={noData || (!!mcp && mcp.servers.length === 0)}
-              emptyText={noData ? 'Waiting for telemetry events' : 'No MCP activity in this range'}
-            >
-              <ServersTable rows={mcp?.servers ?? []} onDrill={setDrill} />
-            </ChartCard>
+              noData={noData}
+              onDrill={setDrill}
+            />
 
             <McpToolsCard
               rows={mcp?.tools ?? []}
@@ -157,8 +149,64 @@ function KpiRow({ mcp, loading, noData }: { mcp: McpResponse | undefined; loadin
 }
 
 // ---------------------------------------------------------------------------
-// Servers table
+// Servers (used servers by default — registering a server creates a row whether
+// or not anyone ever called it, and those crowd out the ones people actually use)
 // ---------------------------------------------------------------------------
+
+function McpServersCard({
+  rows,
+  isLoading,
+  noData,
+  onDrill,
+}: {
+  rows: McpResponse['servers'];
+  isLoading: boolean;
+  noData: boolean;
+  onDrill: (t: BreakdownTarget) => void;
+}) {
+  const [showUnused, setShowUnused] = useState(false);
+  const unused = rows.filter((r) => r.toolCalls === 0).length;
+  const visible = useMemo(
+    () => (showUnused ? rows : rows.filter((r) => r.toolCalls > 0)),
+    [rows, showUnused],
+  );
+  return (
+    <ChartCard
+      title="MCP servers"
+      chartId="mcp-servers-page"
+      metricKey="mcpUsage"
+      subtitle="Connected servers — calls, health, and who uses them"
+      infoExtra="Per-server call counts come from MCP-name telemetry; events ingested before the dashboard learned to read them were counted under an anonymous mcp_tool bucket and don’t appear per server. Servers with no tool calls in range are hidden by default."
+      {...(unused > 0
+        ? {
+            actions: (
+              <button
+                type="button"
+                onClick={() => setShowUnused((v) => !v)}
+                aria-pressed={showUnused}
+                className="rounded-md border border-border bg-transparent px-2 py-1 text-xs text-muted transition-colors hover:border-accent hover:text-fg"
+              >
+                {showUnused ? 'Hide unused' : `Show ${fmtNumber(unused)} unused`}
+              </button>
+            ),
+          }
+        : {})}
+      className="col-span-12 lg:col-span-7"
+      noExport
+      isLoading={isLoading}
+      isEmpty={noData || visible.length === 0}
+      emptyText={
+        noData
+          ? 'Waiting for telemetry events'
+          : rows.length > 0
+            ? 'No server made a tool call in this range'
+            : 'No MCP activity in this range'
+      }
+    >
+      <ServersTable rows={visible} onDrill={onDrill} />
+    </ChartCard>
+  );
+}
 
 function ServersTable({
   rows,
