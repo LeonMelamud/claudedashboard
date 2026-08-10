@@ -14,7 +14,9 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 5 * 60 * 1000,
       retry: 1,
-      refetchOnWindowFocus: false,
+      // Dashboards may sit in a background tab for hours; without focus refetch,
+      // data can remain stale until a remount or an explicit refetch.
+      refetchOnWindowFocus: true,
     },
   },
 });
