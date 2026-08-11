@@ -22,6 +22,7 @@ import {
   type UserDto,
 } from '@dash/shared';
 import type { Repos } from '../repos';
+import { EMPTY_BADGE_STATS } from '../repos/otelRepo';
 import { toUserDto, type UserRow } from '../repos/userRepo';
 import { isEarlyHour, isNightHour, localHourOfUtc } from '../util/time';
 
@@ -82,6 +83,7 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
   const activeDateRows = repos.usage.activeDates(streakFrom, to);
   const sessionsRows = repos.usage.sessionsByUserDay(addDays(to, -27), to);
   const lastActiveRows = repos.usage.globalLastActiveDates();
+  const badgeStatsByUser = repos.otel.perUserBadgeStats(from, to);
 
   // --- index everything per user ---
   const modelsByUser = new Map<
@@ -198,6 +200,7 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       earlyShare: hourly && hourly.total > 0 ? hourly.early / hourly.total : null,
       currentStreak: currentWorkdayStreak(userActiveDates, to, userExpected),
       bestStreak: bestWorkdayStreak(userActiveDates, userExpected),
+      ...(badgeStatsByUser.get(userId) ?? EMPTY_BADGE_STATS),
     });
   }
 
@@ -409,6 +412,7 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
     earlyShare: null,
     currentStreak: currentWorkdayStreak(activeDates, data.range.to, expected),
     bestStreak: bestWorkdayStreak(activeDates, expected),
+    ...EMPTY_BADGE_STATS,
   };
   return assembleEntry({
     user: toUserDto(userRow),
