@@ -778,10 +778,11 @@ function main(): void {
     ['Glob', 0.06],
     ['TodoWrite', 0.05],
     ['WebFetch', 0.03],
+    ['ExitPlanMode', 0.012],
     ['mcp__jira__search', 0.025],
     ['mcp__slack__send', 0.015],
   ];
-  const DECISION_TOOLS = new Set(['Edit', 'Write']);
+  const DECISION_TOOLS = new Set(['Edit', 'Write', 'ExitPlanMode']);
 
   const insertOtelSkill = db.prepare(
     `INSERT INTO otel_skill_daily (date, user_id, skill_name, invocations, user_slash, proactive, nested, cost_cents)
