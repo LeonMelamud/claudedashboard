@@ -39,6 +39,16 @@ function makeInput(overrides: Partial<ScoringInput> = {}): ScoringInput {
     earlyShare: 0.1,
     currentStreak: 6,
     bestStreak: 6,
+    skillInvocations: 25,
+    distinctSkills: 6,
+    mcpCalls: 200,
+    mcpFailures: 10,
+    activeMcpServers: 4,
+    subagentRuns: 30,
+    subagentSuccesses: 29,
+    distinctAgentTypes: 3,
+    planModeEntries: 12,
+    plansAccepted: 6,
     ...overrides,
   };
 }

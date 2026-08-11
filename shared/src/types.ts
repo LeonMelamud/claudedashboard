@@ -25,7 +25,12 @@ export type BadgeId =
   | 'high_output'
   | 'efficient'
   | 'high_acceptance'
-  | 'experimenting';
+  | 'experimenting'
+  | 'skill_smith'
+  | 'plan_first'
+  | 'dream_builder'
+  | 'well_connected'
+  | 'orchestrator';
 
 // ---------------------------------------------------------------------------
 // Core entities
