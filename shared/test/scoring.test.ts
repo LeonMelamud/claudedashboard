@@ -457,11 +457,27 @@ describe('badges', () => {
     }
   });
 
-  it('skill_smith goes not-applicable under minimal privacy (names collapse to 1)', () => {
-    const redacted = makeInput({ distinctSkills: 1, skillInvocations: 80 });
+  it('name-collapse gates go not-applicable with a privacy message, not "no telemetry"', () => {
+    // minimal privacy mode: volume survives, distinct names collapse to 1
+    const redacted = makeInput({
+      distinctSkills: 1,
+      skillInvocations: 80,
+      activeMcpServers: 1,
+      mcpCalls: 400,
+      distinctAgentTypes: 1,
+      subagentRuns: 60,
+      subagentSuccesses: 58,
+    });
     const bare = computeBaselines([redacted]);
     const map = new Map(computeBadges(redacted, bare, computeAxes(redacted, bare)).map((b) => [b.id, b]));
-    expect(map.get('skill_smith')!.detail).toContain('Not applicable');
+    for (const id of ['skill_smith', 'well_connected', 'orchestrator'] as const) {
+      expect(map.get(id)!.earned).toBe(false);
+      expect(map.get(id)!.detail).toContain('Not applicable');
+      expect(map.get(id)!.detail).not.toContain('no skill telemetry');
+      expect(map.get(id)!.detail).not.toContain('no MCP telemetry');
+      expect(map.get(id)!.detail).not.toContain('no subagent telemetry');
+      expect(map.get(id)!.detail).toContain('hidden');
+    }
   });
 
   it('progress is clamped to 1 and reported earned at 1', () => {

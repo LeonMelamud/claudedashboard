@@ -188,8 +188,10 @@ export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): 
 
   // Skill Smith: >=5 distinct skills AND >=20 invocations — breadth over volume
   {
-    if (b.maxSkillInvocations === 0 || b.maxDistinctSkills <= 1) {
+    if (b.maxSkillInvocations === 0) {
       add('skill_smith', false, 0, 'Not applicable — no skill telemetry in this org');
+    } else if (b.maxDistinctSkills <= 1) {
+      add('skill_smith', false, 0, 'Not applicable — skill names hidden by privacy mode');
     } else {
       add(
         'skill_smith',
@@ -230,8 +232,10 @@ export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): 
 
   // Well Connected: >=150 MCP calls, >=3 active servers, >=90% success
   {
-    if (b.maxMcpCalls === 0 || b.maxActiveMcpServers <= 1) {
+    if (b.maxMcpCalls === 0) {
       add('well_connected', false, 0, 'Not applicable — no MCP telemetry in this org');
+    } else if (b.maxActiveMcpServers <= 1) {
+      add('well_connected', false, 0, 'Not applicable — MCP server names hidden by privacy mode');
     } else {
       const successRate = i.mcpCalls > 0 ? 1 - i.mcpFailures / i.mcpCalls : 0;
       add(
@@ -251,8 +255,10 @@ export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): 
 
   // Orchestrator: >=25 subagent runs, >=2 agent types, >=90% success
   {
-    if (b.maxSubagentRuns === 0 || b.maxDistinctAgentTypes <= 1) {
+    if (b.maxSubagentRuns === 0) {
       add('orchestrator', false, 0, 'Not applicable — no subagent telemetry in this org');
+    } else if (b.maxDistinctAgentTypes <= 1) {
+      add('orchestrator', false, 0, 'Not applicable — subagent types hidden by privacy mode');
     } else {
       const successRate = i.subagentRuns > 0 ? i.subagentSuccesses / i.subagentRuns : 0;
       add(
