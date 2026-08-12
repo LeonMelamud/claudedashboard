@@ -15,7 +15,7 @@ const CACHE_MASTER_RATIO = 0.7;
 const CACHE_MASTER_MIN_TOKENS = 1_000_000;
 const TIME_BADGE_SHARE = 0.3;
 const TIME_BADGE_MIN_ACTIVE_DAYS = 10;
-const STREAK_TIERS = { streak_bronze: 5, streak_silver: 10, streak_gold: 20 } as const;
+const STREAK_TIERS = { streak_bronze: 5, streak_silver: 10, streak_gold: 20, streak_kryptonite: 40 } as const;
 const POLYGLOT_MODELS = 3;
 const SKILL_SMITH_DISTINCT = 5;
 const SKILL_SMITH_INVOCATIONS = 20;
@@ -33,7 +33,7 @@ const fmt = (n: number) => (Number.isInteger(n) ? n.toLocaleString('en-US') : n.
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 /**
- * All 19 badge statuses (earned or not, with 0..1 progress) for one user.
+ * All 20 badge statuses (earned or not, with 0..1 progress) for one user.
  * Percentile thresholds come from the frozen org-wide baselines; every
  * percentile badge also has an absolute floor so a quiet week can't mint
  * champions.

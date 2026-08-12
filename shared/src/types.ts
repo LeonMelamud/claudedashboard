@@ -20,6 +20,7 @@ export type BadgeId =
   | 'streak_bronze'
   | 'streak_silver'
   | 'streak_gold'
+  | 'streak_kryptonite'
   | 'polyglot'
   | 'marathon'
   | 'high_output'

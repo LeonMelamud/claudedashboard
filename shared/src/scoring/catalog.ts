@@ -67,6 +67,13 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     description: 'A whole month of showing up, every single workday.',
     rule: 'Best run of 20 active days in a row in the last 90, on your own work week.',
   },
+  streak_kryptonite: {
+    id: 'streak_kryptonite',
+    name: 'Streak · Kryptonite',
+    emoji: '💚',
+    description: 'Workaholic — forty days of showing up, every single workday.',
+    rule: 'Best run of 40 active days in a row in the last 90, on your own work week — zero misses.',
+  },
   polyglot: {
     id: 'polyglot',
     name: 'Polyglot',

@@ -365,12 +365,17 @@ describe('badges', () => {
     expect(map.get('streak_bronze')!.earned).toBe(true);
     expect(map.get('streak_silver')!.earned).toBe(false);
   });
-  it('streak tiers at 5/10/20', () => {
+  it('streak tiers at 5/10/20/40', () => {
     const map = badgesFor(makeInput({ currentStreak: 11 }));
     expect(map.get('streak_bronze')!.earned).toBe(true);
     expect(map.get('streak_silver')!.earned).toBe(true);
     expect(map.get('streak_gold')!.earned).toBe(false);
     expect(map.get('streak_gold')!.progress).toBeCloseTo(0.55);
+    expect(map.get('streak_kryptonite')!.earned).toBe(false);
+    expect(map.get('streak_kryptonite')!.progress).toBeCloseTo(0.275);
+    const workaholic = badgesFor(makeInput({ currentStreak: 40, bestStreak: 40 }));
+    expect(workaholic.get('streak_kryptonite')!.earned).toBe(true);
+    expect(badgesFor(makeInput({ currentStreak: 39, bestStreak: 39 })).get('streak_kryptonite')!.earned).toBe(false);
   });
 
   it('polyglot needs 3 models at >=5% share', () => {
