@@ -10,6 +10,7 @@ import {
   significantModelCount,
   resolveTargets,
   workdaysBetween,
+  utcHourRangeOfLocalDays,
   median,
   DEFAULT_WORKWEEK,
   TOOL_NAMES,
@@ -27,7 +28,7 @@ import {
 import type { Repos } from '../repos';
 import { EMPTY_BADGE_STATS } from '../repos/otelRepo';
 import { toUserDto, type UserRow } from '../repos/userRepo';
-import { isEarlyHour, isNightHour, localHourOfUtc } from '../util/time';
+import { hourInWindow, localHourOfUtc, orgTimezone } from '../util/time';
 
 export interface RangeParams {
   from: string;
@@ -85,8 +86,16 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
 
   const dailyAgg = repos.usage.perUserDaily(from, to);
   const modelAgg = repos.usage.perUserModels(from, to);
-  const hourlyRows = repos.usage.hourlyTokens(from, to);
   const streakFrom = addDays(to, -89);
+  const targets = resolveTargets(repos.settings.getMerged().scoreTargets);
+  // Time-of-day badges describe a HABIT, so — like the streaks — they read the
+  // trailing 90d rather than the selected range. A 7D range otherwise can't
+  // hold the 10 active days the badges require, making them unearnable in
+  // that view, and the same person would flip between owl and nothing just by
+  // touching the range picker.
+  const habitHours = utcHourRangeOfLocalDays(streakFrom, to, orgTimezone());
+  const activityRows = repos.otel.hourlyActivity(habitHours.fromHour, habitHours.toHour);
+  const hourlyTokenRows = repos.usage.hourlyTokens(streakFrom, to);
   const activeDateRows = repos.usage.activeDates(streakFrom, to);
   const sessionsRows = repos.usage.sessionsByUserDay(addDays(to, -27), to);
   const lastActiveRows = repos.usage.globalLastActiveDates();
@@ -113,18 +122,31 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
     });
   }
 
-  const hourlyByUser = new Map<number, HourlyShares>();
-  for (const row of hourlyRows) {
-    let agg = hourlyByUser.get(row.user_id);
-    if (!agg) {
-      agg = { night: 0, early: 0, total: 0 };
-      hourlyByUser.set(row.user_id, agg);
+  // Prefer real activity events (prompts + API requests); fall back to token
+  // volume per user, so an org that syncs usage from the Admin API without
+  // OTEL telemetry still gets a share instead of a blank badge.
+  const tb = targets.timeBadges;
+  const sharesFrom = <T extends { user_id: number; hour_utc: string }>(
+    rows: readonly T[],
+    weightOf: (row: T) => number,
+  ): Map<number, HourlyShares> => {
+    const byUser = new Map<number, HourlyShares>();
+    for (const row of rows) {
+      let agg = byUser.get(row.user_id);
+      if (!agg) {
+        agg = { night: 0, early: 0, total: 0 };
+        byUser.set(row.user_id, agg);
+      }
+      const h = localHourOfUtc(row.hour_utc);
+      const weight = weightOf(row);
+      agg.total += weight;
+      if (hourInWindow(h, tb.nightStartHour, tb.nightEndHour)) agg.night += weight;
+      else if (hourInWindow(h, tb.earlyStartHour, tb.earlyEndHour)) agg.early += weight;
     }
-    const localHour = localHourOfUtc(row.hour_utc);
-    agg.total += row.tokens;
-    if (isNightHour(localHour)) agg.night += row.tokens;
-    else if (isEarlyHour(localHour)) agg.early += row.tokens;
-  }
+    return byUser;
+  };
+  const activityByUser = sharesFrom(activityRows, (r) => r.events);
+  const tokensByUser = sharesFrom(hourlyTokenRows, (r) => r.tokens);
 
   const expectedByUserId = new Map<number, ReadonlySet<number>>();
   const activeDatesByUser = new Map<number, Set<string>>();
@@ -167,7 +189,8 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
     const userExpected = expectedWeekdays(userActiveDates, streakFrom, to);
     expectedByUserId.set(userId, userExpected);
     const models = modelsByUser.get(userId) ?? [];
-    const hourly = hourlyByUser.get(userId);
+    const activity = activityByUser.get(userId);
+    const hourly = activity && activity.total > 0 ? activity : tokensByUser.get(userId);
     const modelTokens: Record<string, number> = {};
     let costCents = 0;
     let inputTokens = 0;
@@ -205,6 +228,7 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       modelTokens,
       nightShare: hourly && hourly.total > 0 ? hourly.night / hourly.total : null,
       earlyShare: hourly && hourly.total > 0 ? hourly.early / hourly.total : null,
+      habitActiveDays: userActiveDates.size,
       currentStreak: currentWorkdayStreak(userActiveDates, to, userExpected),
       bestStreak: bestWorkdayStreak(userActiveDates, userExpected),
       ...(badgeStatsByUser.get(userId) ?? EMPTY_BADGE_STATS),
@@ -216,7 +240,6 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
     .filter(([userId]) => usersById.get(userId)?.actor_type === 'user')
     .map(([, input]) => input);
   const baselines = computeBaselines(userActorInputs);
-  const targets = resolveTargets(repos.settings.getMerged().scoreTargets);
   const covRow = repos.usage.impactCoverage(addDays(to, -89), to);
   const coverage: ImpactCoverage = {
     pullRequests: covRow.activeUsers > 0 ? covRow.usersWithPrs / covRow.activeUsers : 0,
@@ -324,7 +347,7 @@ function assembleEntry(parts: EntryParts): LeaderboardEntry {
 
   const axes = computeAxes(input, targets, coverage);
   const segment = segmentFor(axes);
-  const badges = computeBadges(input, baselines, axes);
+  const badges = computeBadges(input, baselines, axes, targets);
 
   const perTool = emptyPerTool();
   if (daily) {
@@ -429,6 +452,7 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
     modelTokens: {},
     nightShare: null,
     earlyShare: null,
+    habitActiveDays: activeDates.size,
     currentStreak: currentWorkdayStreak(activeDates, data.range.to, expected),
     bestStreak: bestWorkdayStreak(activeDates, expected),
     ...EMPTY_BADGE_STATS,

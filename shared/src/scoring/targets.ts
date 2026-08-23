@@ -25,11 +25,43 @@ export interface ScoreTargets {
     linesPerSession: number;
     linesPerDollar: number;
   };
+  /**
+   * Night Owl / Early Bird. Windows are org-local hours, `end` exclusive, and
+   * may wrap midnight (22 → 5). The two shares are separate on purpose: the
+   * night window is 7h wide and the early one 5h, so one bar for both makes
+   * the shorter window arithmetically harder to clear.
+   *
+   * Defaults are calibrated on a real 33-user org (2026-08) whose prompt-hour
+   * histogram peaks 10:00–17:00: 12% of all activity lands in the night window
+   * and 1.2% before 09:00. An org that genuinely starts at dawn should raise
+   * `earlyShare` / narrow `earlyEndHour` via settings.
+   */
+  timeBadges: {
+    /** minimum share (0..1) of windowed activity to earn the badge */
+    nightShare: number;
+    earlyShare: number;
+    /** org-local window bounds; `end` is exclusive */
+    nightStartHour: number;
+    nightEndHour: number;
+    earlyStartHour: number;
+    earlyEndHour: number;
+    /** distinct active days (trailing 90d) before either badge can be earned */
+    minActiveDays: number;
+  };
 }
 
 export const DEFAULT_SCORE_TARGETS: ScoreTargets = {
   perWorkday: { sessions: 8, toolEvents: 50, linesAdded: 1400, commits: 7.5, pullRequests: 0.5 },
   flat: { linesPerSession: 430, linesPerDollar: 48 },
+  timeBadges: {
+    nightShare: 0.3,
+    earlyShare: 0.15,
+    nightStartHour: 22,
+    nightEndHour: 5,
+    earlyStartHour: 5,
+    earlyEndHour: 10,
+    minActiveDays: 10,
+  },
 };
 
 /**
@@ -70,5 +102,30 @@ export function resolveTargets(override?: unknown): ScoreTargets {
   return {
     perWorkday: pick(DEFAULT_SCORE_TARGETS.perWorkday, o.perWorkday),
     flat: pick(DEFAULT_SCORE_TARGETS.flat, o.flat),
+    timeBadges: pickTimeBadges(o.timeBadges),
   };
+}
+
+const share = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1;
+const hour = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 23;
+
+/**
+ * Hours legitimately include 0, and shares are capped at 1, so the shared
+ * `positive()` pick would both reject midnight and accept a 300% threshold —
+ * this group validates per key against its own domain.
+ */
+function pickTimeBadges(over: unknown): ScoreTargets['timeBadges'] {
+  const base = DEFAULT_SCORE_TARGETS.timeBadges;
+  const out = { ...base };
+  if (!over || typeof over !== 'object') return out;
+  const o = over as Record<string, unknown>;
+  if (share(o['nightShare'])) out.nightShare = o['nightShare'];
+  if (share(o['earlyShare'])) out.earlyShare = o['earlyShare'];
+  if (hour(o['nightStartHour'])) out.nightStartHour = o['nightStartHour'];
+  if (hour(o['nightEndHour'])) out.nightEndHour = o['nightEndHour'];
+  if (hour(o['earlyStartHour'])) out.earlyStartHour = o['earlyStartHour'];
+  if (hour(o['earlyEndHour'])) out.earlyEndHour = o['earlyEndHour'];
+  const days = o['minActiveDays'];
+  if (typeof days === 'number' && Number.isInteger(days) && days > 0) out.minActiveDays = days;
+  return out;
 }

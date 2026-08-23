@@ -10,11 +10,10 @@ import {
   toolEvents,
 } from './scores.js';
 import type { AxisScores } from '../types.js';
+import type { ScoreTargets } from './targets.js';
 
 const CACHE_MASTER_RATIO = 0.7;
 const CACHE_MASTER_MIN_TOKENS = 1_000_000;
-const TIME_BADGE_SHARE = 0.3;
-const TIME_BADGE_MIN_ACTIVE_DAYS = 10;
 const STREAK_TIERS = { streak_bronze: 5, streak_silver: 10, streak_gold: 20, streak_kryptonite: 40 } as const;
 const POLYGLOT_MODELS = 3;
 const SKILL_SMITH_DISTINCT = 5;
@@ -32,6 +31,12 @@ const DEEP_DIVER_COMPACTIONS = 25;
 
 const fmt = (n: number) => (Number.isInteger(n) ? n.toLocaleString('en-US') : n.toFixed(1));
 const pct = (n: number) => `${Math.round(n * 100)}%`;
+/** '22:00–05:00' for a badge caption, so the text always matches the config. */
+const hourWindow = (startHour: number, endHour: number) =>
+  `${String(startHour).padStart(2, '0')}:00–${String(endHour).padStart(2, '0')}:00`;
+/** Above this Impact the Experimenting badge no longer describes the user. */
+const EXPERIMENTING_MAX_IMPACT = 40;
+const EXPERIMENTING_MIN_ADOPTION = 60;
 
 /**
  * All 21 badge statuses (earned or not, with 0..1 progress) for one user.
@@ -39,7 +44,12 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
  * percentile badge also has an absolute floor so a quiet week can't mint
  * champions.
  */
-export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): BadgeStatus[] {
+export function computeBadges(
+  i: ScoringInput,
+  b: Baselines,
+  axes: AxisScores,
+  targets: ScoreTargets,
+): BadgeStatus[] {
   const badges: BadgeStatus[] = [];
   const add = (id: BadgeStatus['id'], earned: boolean, progress: number, detail: string) =>
     badges.push({ id, earned, progress: earned ? 1 : clamp01(progress), detail });
@@ -85,24 +95,37 @@ export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): 
     );
   }
 
-  // Night Owl / Early Bird: >=30% of hourly activity in the window, >=10 active
-  // days; mutually exclusive — the higher share wins.
+  // Night Owl / Early Bird: enough of your windowed activity, over enough
+  // active days. Both shares are measured over the trailing 90d (like the
+  // streaks), so the badge describes a habit instead of flickering with the
+  // range picker — and a 7D view can still satisfy the active-days gate.
+  //
+  // Still mutually exclusive, and when both windows clear their bar the bigger
+  // share wins — but a badge that HAS cleared its own bar is never blocked by
+  // one that hasn't. The bars differ (a 5h morning window can't be asked for
+  // the same share as a 7h night one), so the old raw `night >= early` let a
+  // sub-threshold night share veto a qualifying morning one: 20% night / 16%
+  // early earned nothing at all.
   {
+    const t = targets.timeBadges;
     const night = i.nightShare ?? 0;
     const early = i.earlyShare ?? 0;
-    const eligible = i.activeDays >= TIME_BADGE_MIN_ACTIVE_DAYS;
-    const nightWins = night >= early;
+    const dayProgress = i.habitActiveDays / t.minActiveDays;
+    const eligible = i.habitActiveDays >= t.minActiveDays;
+    const nightClears = night >= t.nightShare;
+    const earlyClears = early >= t.earlyShare;
+    const nightWins = nightClears && (!earlyClears || night >= early);
     add(
       'night_owl',
-      eligible && night >= TIME_BADGE_SHARE && nightWins,
-      eligible ? night / TIME_BADGE_SHARE : 0,
-      `${pct(night)} of activity 22:00–05:00`,
+      eligible && nightWins,
+      Math.min(night / t.nightShare, dayProgress),
+      `${pct(night)} of activity ${hourWindow(t.nightStartHour, t.nightEndHour)}`,
     );
     add(
       'early_bird',
-      eligible && early >= TIME_BADGE_SHARE && !nightWins,
-      eligible ? early / TIME_BADGE_SHARE : 0,
-      `${pct(early)} of activity 05:00–09:00`,
+      eligible && earlyClears && !nightWins,
+      Math.min(early / t.earlyShare, dayProgress),
+      `${pct(early)} of activity ${hourWindow(t.earlyStartHour, t.earlyEndHour)}`,
     );
   }
 
@@ -170,15 +193,21 @@ export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): 
     );
   }
 
-  // Experimenting: Adoption >= 60 AND Impact < 40 (positive framing)
+  // Experimenting: Adoption >= 60 while Impact is still low — a "keep going,
+  // the output is coming" badge. Once Impact arrives the badge stops
+  // describing the user, so it gates to not-applicable like pr_machine rather
+  // than sitting there locked at 0 progress, which reads as a failure.
   {
-    const earned = axes.adoption >= 60 && axes.impact < 40;
-    add(
-      'experimenting',
-      earned,
-      earned ? 1 : Math.min(axes.adoption / 60, 1) * (axes.impact < 40 ? 1 : 0),
-      `adoption ${axes.adoption}, impact ${axes.impact}`,
-    );
+    if (axes.impact >= EXPERIMENTING_MAX_IMPACT) {
+      add('experimenting', false, 0, 'Not applicable — your work is already landing');
+    } else {
+      add(
+        'experimenting',
+        axes.adoption >= EXPERIMENTING_MIN_ADOPTION,
+        axes.adoption / EXPERIMENTING_MIN_ADOPTION,
+        `adoption ${axes.adoption} / ${EXPERIMENTING_MIN_ADOPTION}`,
+      );
+    }
   }
 
   // ---- Value-delivery badges (OTEL telemetry). Absolute thresholds,

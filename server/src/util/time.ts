@@ -92,10 +92,12 @@ export function localWeekdayOfUtc(hourUtcIso: string): number {
   return v;
 }
 
-export function isNightHour(h: number): boolean {
-  return h >= 22 || h < 5;
-}
-
-export function isEarlyHour(h: number): boolean {
-  return h >= 5 && h < 9;
+/**
+ * Is an org-local hour inside [startHour, endHour)? Windows may wrap midnight
+ * (22 → 5), which is why this can't be a plain range check. Both bounds come
+ * from settings (`scoreTargets.timeBadges`), so the night/early windows are an
+ * org decision rather than a constant baked in here.
+ */
+export function hourInWindow(h: number, startHour: number, endHour: number): boolean {
+  return startHour <= endHour ? h >= startHour && h < endHour : h >= startHour || h < endHour;
 }

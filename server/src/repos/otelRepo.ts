@@ -201,6 +201,13 @@ export interface UserRollupRow {
   top_skill: string | null;
 }
 
+/** One user's activity-event count for one UTC hour bucket. */
+export interface HourlyActivityRow {
+  user_id: number;
+  hour_utc: string;
+  events: number;
+}
+
 /** Per-user aggregates powering the value-delivery badges. Field names match ScoringInput. */
 export interface UserBadgeStats {
   skillInvocations: number;
@@ -524,6 +531,27 @@ export class OtelRepo {
   // -------------------------------------------------------------------------
   // Route aggregates
   // -------------------------------------------------------------------------
+
+  /**
+   * Per-user hourly activity-event counts for the time-of-day badges. Prompts
+   * and API requests both count: prompts alone are too sparse to shape a
+   * share (single digits in any given hour), and api_requests carries the same
+   * time-of-day signal with far more of it. Tokens are deliberately NOT used —
+   * one big-context run outweighs a whole morning of work, which is how a
+   * "when do you work" badge ended up measuring "when do you burn context".
+   *
+   * Bounds are UTC hour keys ('YYYY-MM-DDTHH:00:00Z'), inclusive, like
+   * usageRepo.hourlyTokens; the caller converts local days to that range.
+   */
+  hourlyActivity(fromHour: string, toHour: string): HourlyActivityRow[] {
+    return this.db
+      .prepare(
+        `SELECT user_id, hour_utc, (prompts + api_requests) AS events
+         FROM otel_activity_hourly
+         WHERE hour_utc >= ? AND hour_utc <= ? AND (prompts + api_requests) > 0`,
+      )
+      .all(fromHour, toHour) as HourlyActivityRow[];
+  }
 
   /** Per-user stats for the value-delivery badges — one GROUP BY query per table. */
   perUserBadgeStats(from: string, to: string): Map<number, UserBadgeStats> {

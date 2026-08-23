@@ -37,14 +37,14 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     name: 'Night Owl',
     emoji: '🦉',
     description: 'Does their best Claude work after dark.',
-    rule: '≥ 30% of activity between 22:00 and 05:00 local time, ≥ 10 active days.',
+    rule: 'By default ≥ 30% of your activity between 22:00 and 05:00 local time, over ≥ 10 active days in the last 90. Window and bar are org-configurable.',
   },
   early_bird: {
     id: 'early_bird',
     name: 'Early Bird',
     emoji: '🌅',
     description: 'First one in, coffee and Claude before standup.',
-    rule: '≥ 30% of activity between 05:00 and 09:00 local time, ≥ 10 active days.',
+    rule: 'By default ≥ 15% of your activity between 05:00 and 10:00 local time, over ≥ 10 active days in the last 90 — a lower bar than Night Owl because the morning window is shorter. Window and bar are org-configurable.',
   },
   streak_bronze: {
     id: 'streak_bronze',
@@ -114,7 +114,7 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     name: 'Experimenting',
     emoji: '🧪',
     description: 'Deep in exploration — the output is coming.',
-    rule: 'Adoption score ≥ 60 while impact is still < 40. Keep going!',
+    rule: 'Adoption score ≥ 60 while impact is still < 40. Keep going! Once your impact passes 40 the badge no longer applies — you\'ve graduated.',
   },
   skill_smith: {
     id: 'skill_smith',

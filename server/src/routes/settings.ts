@@ -5,6 +5,8 @@ import type { AppContext } from '../context';
 import { parseBody } from './shared';
 
 const targetNum = z.number().positive().finite();
+const shareNum = z.number().positive().max(1).finite();
+const hourNum = z.number().int().min(0).max(23);
 
 // displayTimezone is deliberately absent: the zone comes from ORG_TIMEZONE, and
 // an editable copy that nothing honoured is worse than no field at all.
@@ -31,13 +33,32 @@ const settingsPatchSchema = z.object({
         .object({ linesPerSession: targetNum, linesPerDollar: targetNum })
         .partial()
         .optional(),
+      timeBadges: z
+        .object({
+          nightShare: shareNum,
+          earlyShare: shareNum,
+          nightStartHour: hourNum,
+          nightEndHour: hourNum,
+          earlyStartHour: hourNum,
+          earlyEndHour: hourNum,
+          minActiveDays: z.number().int().positive(),
+        })
+        .partial()
+        .optional(),
     })
     .optional(),
 });
 
 export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): void {
   /** The stored settings, with the zone overridden by ORG_TIMEZONE. */
-  const merged = (stored: AppSettings): AppSettings => ({ ...stored, displayTimezone: ctx.env.orgTimezone });
+  // scoreTargets is resolved on the way out too: rows persisted by an older
+  // build predate whole target groups, and a shallow settings merge would hand
+  // the client a half-populated object.
+  const merged = (stored: AppSettings): AppSettings => ({
+    ...stored,
+    displayTimezone: ctx.env.orgTimezone,
+    scoreTargets: resolveTargets(stored.scoreTargets),
+  });
 
   app.get('/api/settings', async (): Promise<AppSettings> => merged(ctx.repos.settings.getMerged()));
 
@@ -47,9 +68,11 @@ export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): v
       // deep-merge the partial over what's currently effective, then store the
       // full resolved object — a stored value is always complete and valid
       const current = ctx.repos.settings.getMerged().scoreTargets;
+      const effective = resolveTargets(current);
       const overCurrent = {
-        perWorkday: { ...current.perWorkday, ...patch.scoreTargets.perWorkday },
-        flat: { ...current.flat, ...patch.scoreTargets.flat },
+        perWorkday: { ...effective.perWorkday, ...patch.scoreTargets.perWorkday },
+        flat: { ...effective.flat, ...patch.scoreTargets.flat },
+        timeBadges: { ...effective.timeBadges, ...patch.scoreTargets.timeBadges },
       };
       patch.scoreTargets = resolveTargets(overCurrent);
     }

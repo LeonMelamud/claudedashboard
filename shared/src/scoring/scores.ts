@@ -24,9 +24,21 @@ export interface ScoringInput {
   cacheReadTokens: number;
   /** total tokens per model, for Polyglot */
   modelTokens: Record<string, number>;
-  /** share (0..1) of hourly activity in 22:00–04:59 / 05:00–08:59 org-local time; null = no hourly data */
+  /**
+   * Share (0..1) of the user's activity that fell inside the night / early
+   * window in org-local time, over the trailing 90d — NOT the selected range,
+   * so a time-of-day habit reads the same in the 7D and 90D views. `null` =
+   * no hourly data at all. "Activity" is prompt + API-request counts when OTEL
+   * hourly telemetry exists, else token volume (see the server's assembler).
+   */
   nightShare: number | null;
   earlyShare: number | null;
+  /**
+   * Distinct active days in the trailing 90d — the eligibility gate for the
+   * two time badges. Range-scoped `activeDays` can't serve: a 7D view has at
+   * most 7, which no minimum of 10 could ever clear.
+   */
+  habitActiveDays: number;
   /** trailing-90d consecutive active workdays */
   currentStreak: number;
   /** longest such run inside the trailing 90d — what streak badges are earned on */
