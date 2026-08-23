@@ -33,7 +33,8 @@ export type BadgeId =
   | 'plan_first'
   | 'dream_builder'
   | 'well_connected'
-  | 'orchestrator';
+  | 'orchestrator'
+  | 'deep_diver';
 
 // ---------------------------------------------------------------------------
 // Core entities

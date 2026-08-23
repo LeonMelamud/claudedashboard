@@ -54,6 +54,7 @@ function makeInput(overrides: Partial<ScoringInput> = {}): ScoringInput {
     distinctAgentTypes: 3,
     planModeEntries: 12,
     plansAccepted: 6,
+    compactions: 30,
     ...overrides,
   };
 }
@@ -522,15 +523,58 @@ describe('badges', () => {
       distinctAgentTypes: 0,
       planModeEntries: 0,
       plansAccepted: 0,
+      compactions: 0,
     });
     const bare = computeBaselines([noTelemetry]);
     const map = new Map(
       computeBadges(noTelemetry, bare, computeAxes(noTelemetry, TARGETS, FULL_COVERAGE)).map((b) => [b.id, b]),
     );
-    for (const id of ['skill_smith', 'plan_first', 'dream_builder', 'well_connected', 'orchestrator'] as const) {
+    for (const id of [
+      'skill_smith',
+      'plan_first',
+      'dream_builder',
+      'well_connected',
+      'orchestrator',
+      'deep_diver',
+    ] as const) {
       expect(map.get(id)!.earned).toBe(false);
       expect(map.get(id)!.detail).toContain('Not applicable');
     }
+  });
+
+  it('deep diver needs 25 all-time compactions', () => {
+    expect(badgesFor(makeInput({ compactions: 25 })).get('deep_diver')!.earned).toBe(true);
+    const short = badgesFor(makeInput({ compactions: 24 })).get('deep_diver')!;
+    expect(short.earned).toBe(false);
+    expect(short.progress).toBeCloseTo(24 / 25, 5);
+    expect(short.detail).toContain('all-time');
+  });
+
+  it('deep diver stays applicable when the only compactor is idle this range', () => {
+    // The gate mirrors an all-time stat, so it must look at everyone: an org's
+    // one heavy compactor being on holiday cannot turn the badge into
+    // "Not applicable" for the whole org.
+    const idleCompactor = makeInput({ userId: 9, sessions: 0, compactions: 60 });
+    const activeNoCompactions = makeInput({ userId: 10, compactions: 0 });
+    const bl = computeBaselines([idleCompactor, activeNoCompactions]);
+    expect(bl.maxCompactions).toBe(60);
+    const map = new Map(
+      computeBadges(
+        activeNoCompactions,
+        bl,
+        computeAxes(activeNoCompactions, TARGETS, FULL_COVERAGE),
+      ).map((b) => [b.id, b]),
+    );
+    expect(map.get('deep_diver')!.detail).not.toContain('Not applicable');
+    expect(map.get('deep_diver')!.detail).toContain('0 / 25');
+  });
+
+  it('deep diver is history-based, so a narrow range does not shrink it', () => {
+    // Same person, one-week range: every range-scoped badge sees fewer
+    // workdays, but compactions are counted over history — so the badge holds.
+    const week = makeInput({ compactions: 40, workdays: 5, activeDays: 5 });
+    expect(badgesFor(week).get('deep_diver')!.earned).toBe(true);
+    expect(badgesFor(week).get('deep_diver')!.detail).toBe('40 / 25 compactions (all-time)');
   });
 
   it('name-collapse gates go not-applicable with a privacy message, not "no telemetry"', () => {
