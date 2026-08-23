@@ -515,6 +515,9 @@ describe('badges', () => {
     );
     const badge = explorer.get('experimenting')!;
     expect(badge.earned).toBe(true);
+    // the caption is one string for both states, so it must not read as a
+    // shortfall ("… / 60 needed") once the badge is actually earned
+    expect(badge.detail).toMatch(/^adoption [\d.]+ \/ 60$/);
   });
 
   it('keeps a streak badge earned after the run breaks', () => {

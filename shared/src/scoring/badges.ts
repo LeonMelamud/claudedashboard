@@ -205,7 +205,7 @@ export function computeBadges(
         'experimenting',
         axes.adoption >= EXPERIMENTING_MIN_ADOPTION,
         axes.adoption / EXPERIMENTING_MIN_ADOPTION,
-        `adoption ${axes.adoption} / ${EXPERIMENTING_MIN_ADOPTION} needed`,
+        `adoption ${axes.adoption} / ${EXPERIMENTING_MIN_ADOPTION}`,
       );
     }
   }
