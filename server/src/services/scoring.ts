@@ -8,13 +8,16 @@ import {
   expectedWeekdays,
   segmentFor,
   significantModelCount,
+  resolveTargets,
   workdaysBetween,
   median,
   DEFAULT_WORKWEEK,
   TOOL_NAMES,
   type ActorType,
   type Baselines,
+  type ImpactCoverage,
   type LeaderboardEntry,
+  type ScoreTargets,
   type LeaderboardMetrics,
   type LeaderboardResponse,
   type ScoringInput,
@@ -41,6 +44,10 @@ interface HourlyShares {
 export interface LeaderboardData {
   range: RangeParams;
   baselines: Baselines;
+  /** fixed scoring targets (defaults merged with settings.scoreTargets) */
+  targets: ScoreTargets;
+  /** trailing-90d Impact-term coverage (stable org fact; see usageRepo.impactCoverage) */
+  coverage: ImpactCoverage;
   /** entries for every actor (any type) with usage rows in range */
   entries: LeaderboardEntry[];
   entryByUserId: Map<number, LeaderboardEntry>;
@@ -209,6 +216,12 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
     .filter(([userId]) => usersById.get(userId)?.actor_type === 'user')
     .map(([, input]) => input);
   const baselines = computeBaselines(userActorInputs);
+  const targets = resolveTargets(repos.settings.getMerged().scoreTargets);
+  const covRow = repos.usage.impactCoverage(addDays(to, -89), to);
+  const coverage: ImpactCoverage = {
+    pullRequests: covRow.activeUsers > 0 ? covRow.usersWithPrs / covRow.activeUsers : 0,
+    commits: covRow.activeUsers > 0 ? covRow.usersWithCommits / covRow.activeUsers : 0,
+  };
 
   // --- entries ---
   const entryByUserId = new Map<number, LeaderboardEntry>();
@@ -220,6 +233,8 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       user: toUserDto(userRow),
       input,
       baselines,
+      targets,
+      coverage,
       daily: dailyByUser.get(userId),
       models: modelsByUser.get(userId) ?? [],
       activeDates: activeDatesByUser.get(userId) ?? new Set(),
@@ -260,6 +275,8 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
   return {
     range,
     baselines,
+    targets,
+    coverage,
     entries,
     entryByUserId,
     inputByUserId,
@@ -278,6 +295,8 @@ interface EntryParts {
   user: UserDto;
   input: ScoringInput;
   baselines: Baselines;
+  targets: ScoreTargets;
+  coverage: ImpactCoverage;
   daily:
     | {
         lines_removed: number;
@@ -301,9 +320,9 @@ interface EntryParts {
 }
 
 function assembleEntry(parts: EntryParts): LeaderboardEntry {
-  const { user, input, baselines, daily, models, activeDates, expected, sessionsByDay, lastActiveDate, to } = parts;
+  const { user, input, baselines, targets, coverage, daily, models, activeDates, expected, sessionsByDay, lastActiveDate, to } = parts;
 
-  const axes = computeAxes(input, baselines);
+  const axes = computeAxes(input, targets, coverage);
   const segment = segmentFor(axes);
   const badges = computeBadges(input, baselines, axes);
 
@@ -418,6 +437,8 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
     user: toUserDto(userRow),
     input: zeroInput,
     baselines: data.baselines,
+    targets: data.targets,
+    coverage: data.coverage,
     daily: undefined,
     models: [],
     activeDates,

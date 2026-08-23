@@ -4,6 +4,8 @@
  * All costs are cents (USD) as numbers; divide by 100 and round only at display.
  */
 
+import { DEFAULT_SCORE_TARGETS, type ScoreTargets } from './scoring/targets.js';
+
 export type ActorType = 'user' | 'api_key';
 export type Granularity = 'day' | 'week' | 'month';
 export type SegmentTier = 'starter' | 'explorer' | 'producer' | 'champion';
@@ -418,6 +420,8 @@ export interface AppSettings {
   /** insight thresholds */
   inactiveDays: number; // default 7
   decliningPct: number; // default 40 (drop vs prior 14d)
+  /** fixed scoring targets (see scoring/targets.ts); partial overrides merge over defaults */
+  scoreTargets: ScoreTargets;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -427,6 +431,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   seatCostUsdMonthly: 60,
   inactiveDays: 7,
   decliningPct: 40,
+  scoreTargets: DEFAULT_SCORE_TARGETS,
 };
 
 // ---------------------------------------------------------------------------

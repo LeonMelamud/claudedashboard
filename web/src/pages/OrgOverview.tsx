@@ -12,7 +12,7 @@ import {
   type OverviewResponse,
   type SegmentTier,
 } from '@dash/shared';
-import { daysBetween } from '@dash/shared';
+import { daysBetween, SEGMENT_THRESHOLDS } from '@dash/shared';
 import { useRangeParams } from '@/hooks/useRangeParams';
 import {
   useAdoption,
@@ -857,11 +857,11 @@ function Quadrant({
             label: { show: false },
             lineStyle: { color: t.border, type: 'dashed', width: 1 },
             data: [
-              { xAxis: 20 },
-              { xAxis: 50 },
-              { xAxis: 70 },
-              { yAxis: 40 },
-              { yAxis: 70 },
+              { xAxis: SEGMENT_THRESHOLDS.starterBelowAdoption },
+              { xAxis: SEGMENT_THRESHOLDS.producer.adoption },
+              { xAxis: SEGMENT_THRESHOLDS.champion.adoption },
+              { yAxis: SEGMENT_THRESHOLDS.producer.impact },
+              { yAxis: SEGMENT_THRESHOLDS.champion.impact },
             ],
           },
           data: entries.map((e) => ({

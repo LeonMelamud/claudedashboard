@@ -401,6 +401,26 @@ export class UsageRepo {
       .all(fromHour, toHour) as HourlyTokenRow[];
   }
 
+  /**
+   * Impact-term coverage over [from, to] (callers pass a trailing-90d window):
+   * how many user-actors were active at all, and how many of those produced
+   * any PRs / commits. Feeds the coverage-gated Impact weights — a stable org
+   * fact, deliberately independent of the user-selected range.
+   */
+  impactCoverage(from: string, to: string): { activeUsers: number; usersWithPrs: number; usersWithCommits: number } {
+    return this.db
+      .prepare(
+        `SELECT
+           COUNT(DISTINCT CASE WHEN d.num_sessions > 0 THEN d.user_id END) AS activeUsers,
+           COUNT(DISTINCT CASE WHEN d.pull_requests > 0 THEN d.user_id END) AS usersWithPrs,
+           COUNT(DISTINCT CASE WHEN d.commits > 0 THEN d.user_id END) AS usersWithCommits
+         FROM usage_daily d
+         JOIN users u ON u.id = d.user_id
+         WHERE d.date BETWEEN ? AND ? AND u.actor_type = 'user'`,
+      )
+      .get(from, to) as { activeUsers: number; usersWithPrs: number; usersWithCommits: number };
+  }
+
   /** Distinct active dates per user in [from, to] (any usage row). */
   activeDates(from: string, to: string): UserDateRow[] {
     return this.db
