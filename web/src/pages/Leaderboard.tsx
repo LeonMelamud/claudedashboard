@@ -52,7 +52,15 @@ export default function Leaderboard() {
       <header className="flex flex-wrap items-center gap-2">
         <span className="mr-2 inline-flex items-center gap-1.5">
           <h1 className="text-xl font-semibold tracking-tight">Leaderboard</h1>
-          <InfoPopover metricKey="composite" />
+          <InfoPopover
+            metricKey="composite"
+            extra={
+              <span>
+                <span className="font-medium text-fg">Top movers</span> — largest session growth
+                vs the previous 14 days: momentum, not absolute rank.
+              </span>
+            }
+          />
         </span>
         <button
           type="button"
@@ -105,7 +113,7 @@ export default function Leaderboard() {
         movers.length > 0 && (
           <div>
             <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
-              Top movers <InfoPopover metricKey="topMovers" />
+              Top movers
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {movers.map((e, i) => (

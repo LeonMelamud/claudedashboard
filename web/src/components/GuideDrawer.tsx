@@ -41,10 +41,23 @@ export function GuideDrawer({ open, onOpenChange }: { open: boolean; onOpenChang
             return (
               <div key={key} className="rounded-lg border border-border bg-bg/50 p-3">
                 <div className="text-xs font-semibold">{g.name}</div>
+                {g.parts && g.parts.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {g.parts.map((part) => (
+                      <div key={part.label} className="flex items-baseline gap-2 text-xs">
+                        <span className="w-9 shrink-0 text-right font-mono text-[10.5px] font-semibold">
+                          {part.weight}
+                        </span>
+                        <span className="shrink-0 font-medium">{part.label}</span>
+                        <span className="text-muted">— {part.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="mt-1.5 text-xs leading-relaxed text-muted">{g.explanation}</p>
                 <div className="mt-1 rounded bg-fg/5 px-2 py-1 font-mono text-[10.5px] text-muted">
                   {g.formula}
                 </div>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted">{g.explanation}</p>
               </div>
             );
           })}

@@ -57,9 +57,9 @@ export function InfoPopover({ metricKey, extra }: { metricKey?: string; extra?: 
         <button
           type="button"
           aria-label="What is this metric?"
-          className="text-muted hover:text-fg transition-colors"
+          className="text-muted hover:text-fg -m-1 rounded-full p-1 transition-colors hover:bg-border/40"
         >
-          <Info size={13} />
+          <Info size={16} />
         </button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
@@ -68,15 +68,28 @@ export function InfoPopover({ metricKey, extra }: { metricKey?: string; extra?: 
           align="start"
           sideOffset={6}
           collisionPadding={8}
-          className="card pop-in z-50 w-72 p-3 text-xs shadow-xl"
+          className={cn('card pop-in z-50 p-3 text-xs shadow-xl', guide?.parts?.length ? 'w-80' : 'w-72')}
         >
           {guide && (
             <div className="space-y-1.5">
               <div className="font-semibold text-sm">{guide.name}</div>
+              {guide.parts && guide.parts.length > 0 && (
+                <div className="space-y-1 py-0.5">
+                  {guide.parts.map((part) => (
+                    <div key={part.label} className="flex items-baseline gap-2">
+                      <span className="w-9 shrink-0 text-right font-mono text-[11px] font-semibold text-fg">
+                        {part.weight}
+                      </span>
+                      <span className="shrink-0 font-medium text-fg">{part.label}</span>
+                      <span className="text-muted">— {part.note}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-muted leading-relaxed">{guide.explanation}</p>
               <div className="rounded-md border border-border bg-bg px-2 py-1 font-mono text-[11px] text-muted">
                 {guide.formula}
               </div>
-              <p className="text-muted leading-relaxed">{guide.explanation}</p>
             </div>
           )}
           {extra && <div className={cn('text-muted leading-relaxed', guide && 'mt-2')}>{extra}</div>}

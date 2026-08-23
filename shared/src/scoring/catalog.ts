@@ -200,37 +200,72 @@ export const SEGMENT_CATALOG: Record<SegmentTier, SegmentMeta> = {
 
 export const SEGMENT_ORDER: SegmentTier[] = ['champion', 'producer', 'explorer', 'starter'];
 
+/** One weighted ingredient of a score, rendered as a row in the info popover. */
+export interface GuidePart {
+  /** e.g. '35%' — kept as a string so 4/7-style redistributed weights render honestly */
+  weight: string;
+  label: string;
+  note: string;
+}
+
 /** Plain-language metric documentation for info popovers + the guide drawer. */
-export const METRIC_GUIDE: Record<string, { name: string; formula: string; explanation: string }> = {
+export const METRIC_GUIDE: Record<
+  string,
+  { name: string; formula: string; explanation: string; parts?: GuidePart[] }
+> = {
   adoption: {
     name: 'Adoption score',
     formula: '0.40·S(sessions) + 0.40·(active days ÷ workdays × 100) + 0.20·S(tool decisions)',
+    parts: [
+      { weight: '40%', label: 'Sessions', note: 'vs a target of 8 per workday' },
+      { weight: '40%', label: 'Consistency', note: 'active days ÷ workdays — showing up regularly' },
+      { weight: '20%', label: 'Tool decisions', note: 'edits reviewed, vs 50 per workday' },
+    ],
     explanation:
-      'How often and how consistently someone works with Claude Code. S() scores against a fixed target scaled to the range’s workdays (√ curve, capped at 100) — your score depends only on your own work, never on how much anyone else did.',
+      'How often and how consistently you work with Claude Code. Every part is measured against a fixed target — half the target ≈ 71 points, at target = 100, beyond it adds nothing. Only your own work moves your score.',
   },
   impact: {
     name: 'Impact score',
     formula: '0.40·S(lines added) + 0.30·S(commits) + 0.30·S(pull requests)',
+    parts: [
+      { weight: '40%', label: 'Lines added', note: 'vs 1,400 per workday' },
+      { weight: '30%', label: 'Commits', note: 'vs 7.5 per workday' },
+      { weight: '30%', label: 'Pull requests', note: 'vs 0.5 per workday (GitHub-counted only)' },
+    ],
     explanation:
-      'Shipped output attributable to Claude Code: code written, committed, and PR’d. A term fewer than 25% of active users can produce (trailing 90 days — e.g. PR counting is GitHub-only) redistributes its weight to the others.',
+      'Code that actually ships: written, committed, PR’d. If fewer than 25% of active users can produce a part at all (e.g. PRs in a non-GitHub org), its weight moves to the other parts — nobody is penalized for a tool gap.',
   },
   efficiency: {
     name: 'Efficiency score',
     formula: '0.35·S(lines/session) + 0.45·S(lines/$) + 0.20·(cache ratio × 100)',
+    parts: [
+      { weight: '45%', label: 'Lines per $', note: 'the biggest part — lots of code at low cost' },
+      { weight: '35%', label: 'Lines per session', note: 'focused sessions that produce, vs 430' },
+      { weight: '20%', label: 'Cache ratio', note: 'reusing context instead of re-paying for it' },
+    ],
     explanation:
-      'Output per unit of effort and money — lines per dollar carries the axis: shipping a lot at low cost is the strongest efficiency signal. Halved below 10 sessions (low confidence).',
+      'Output per unit of effort and money. Shipping a lot at low cost is the strongest signal here. Halved below 10 sessions (too little data to judge).',
   },
   trust: {
     name: 'Trust score',
     formula: 'min(acceptance rate ÷ 0.60, 1) × 100',
+    parts: [
+      { weight: '100%', label: 'Acceptance rate', note: 'edits kept ÷ edits reviewed; 60% already = 100 pts' },
+    ],
     explanation:
-      'How often Claude’s file edits are kept. 60% acceptance counts as a perfect score. Halved below 20 decisions (low confidence).',
+      'How often Claude’s file edits are kept. Rejecting bad suggestions is healthy, so 60% acceptance already counts as perfect. Halved below 20 decisions (too little data to judge).',
   },
   composite: {
     name: 'Composite score',
     formula: '0.35·Adoption + 0.35·Impact + 0.15·Efficiency + 0.15·Trust',
+    parts: [
+      { weight: '35%', label: 'Adoption', note: 'how often & how consistently you use it' },
+      { weight: '35%', label: 'Impact', note: 'code that ships: lines, commits, PRs' },
+      { weight: '15%', label: 'Efficiency', note: 'output per session and per dollar' },
+      { weight: '15%', label: 'Trust', note: 'how often your edits are kept' },
+    ],
     explanation:
-      'The leaderboard rank. Withheld ("—") for users with fewer than 3 active days in the range.',
+      'The leaderboard rank. Every part is scored against fixed targets, not against other people — half the target ≈ 71 points, at target = 100, beyond it adds nothing. Withheld ("—") under 3 active days.',
   },
   acceptanceRate: {
     name: 'Acceptance rate',
