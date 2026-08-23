@@ -49,6 +49,12 @@ export interface ScoringInput {
   planModeEntries: number;
   /** ExitPlanMode accepted count (otel_tool_daily) — plans approved */
   plansAccepted: number;
+  /**
+   * All-time context compactions, NOT scoped to the selected range — like
+   * `bestStreak`, this is an achievement measured over history, so the badge
+   * doesn't disappear when someone switches the range picker to 7D.
+   */
+  compactions: number;
 }
 
 /**
@@ -76,6 +82,13 @@ export interface Baselines {
   maxDistinctAgentTypes: number;
   maxPlanModeEntries: number;
   maxPlansAccepted: number;
+  /**
+   * All-time org max compactions, over the WHOLE population rather than just
+   * range-active users — it gates deep_diver's "Not applicable", and the stat
+   * it mirrors is all-time, so a heavy compactor who happens to be idle this
+   * range must not zero the gate for everyone.
+   */
+  maxCompactions: number;
   /** population size the baselines were computed over */
   sampleSize: number;
 }
@@ -124,6 +137,8 @@ export function significantModelCount(modelTokens: Record<string, number>): numb
 export function computeBaselines(population: ScoringInput[]): Baselines {
   const active = population.filter((u) => u.sessions > 0);
   const max = (f: (u: ScoringInput) => number) => active.reduce((m, u) => Math.max(m, f(u)), 0);
+  /** max over everyone, for baselines mirroring an all-time (range-independent) stat */
+  const maxEver = (f: (u: ScoringInput) => number) => population.reduce((m, u) => Math.max(m, f(u)), 0);
   const values = (f: (u: ScoringInput) => number) => active.map(f);
   return {
     maxPullRequests: max((u) => u.pullRequests),
@@ -140,6 +155,7 @@ export function computeBaselines(population: ScoringInput[]): Baselines {
     maxDistinctAgentTypes: max((u) => u.distinctAgentTypes),
     maxPlanModeEntries: max((u) => u.planModeEntries),
     maxPlansAccepted: max((u) => u.plansAccepted),
+    maxCompactions: maxEver((u) => u.compactions),
     sampleSize: active.length,
   };
 }

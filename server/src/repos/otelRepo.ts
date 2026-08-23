@@ -213,6 +213,8 @@ export interface UserBadgeStats {
   distinctAgentTypes: number;
   planModeEntries: number;
   plansAccepted: number;
+  /** all-time compactions (deliberately NOT range-scoped — see deep_diver) */
+  compactions: number;
 }
 
 export const EMPTY_BADGE_STATS: UserBadgeStats = {
@@ -226,6 +228,7 @@ export const EMPTY_BADGE_STATS: UserBadgeStats = {
   distinctAgentTypes: 0,
   planModeEntries: 0,
   plansAccepted: 0,
+  compactions: 0,
 };
 
 export interface OtelTotals {
@@ -604,6 +607,17 @@ export class OtelRepo {
       )
       .all(params) as Array<{ user_id: number; plans: number }>;
     for (const r of exitPlan) acc(r.user_id).plansAccepted = r.plans;
+
+    // All-time on purpose: no date filter. Compaction is a rare event, so the
+    // Deep Diver badge counts it over the user's whole history — the same way
+    // streaks are measured outside the selected range.
+    const compactions = this.db
+      .prepare(
+        `SELECT user_id, COALESCE(SUM(compactions), 0) AS total
+         FROM otel_reliability_daily WHERE compactions > 0 GROUP BY user_id`,
+      )
+      .all() as Array<{ user_id: number; total: number }>;
+    for (const r of compactions) acc(r.user_id).compactions = r.total;
 
     return byUser;
   }

@@ -28,12 +28,13 @@ const WELL_CONNECTED_SUCCESS = 0.9;
 const ORCHESTRATOR_RUNS = 25;
 const ORCHESTRATOR_TYPES = 2;
 const ORCHESTRATOR_SUCCESS = 0.9;
+const DEEP_DIVER_COMPACTIONS = 25;
 
 const fmt = (n: number) => (Number.isInteger(n) ? n.toLocaleString('en-US') : n.toFixed(1));
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 /**
- * All 20 badge statuses (earned or not, with 0..1 progress) for one user.
+ * All 21 badge statuses (earned or not, with 0..1 progress) for one user.
  * Percentile thresholds come from the frozen org-wide baselines; every
  * percentile badge also has an absolute floor so a quiet week can't mint
  * champions.
@@ -272,6 +273,23 @@ export function computeBadges(i: ScoringInput, b: Baselines, axes: AxisScores): 
           i.subagentRuns > 0 ? successRate / ORCHESTRATOR_SUCCESS : 0,
         ),
         `${fmt(i.subagentRuns)} runs · ${fmt(i.distinctAgentTypes)} agent types · ${pct(successRate)} success`,
+      );
+    }
+  }
+
+  // Deep Diver: all-time compactions >= 25. Measured over history, not the
+  // selected range — compaction is rare (a session outgrowing the context
+  // window), so a 7D view would never mint one, and an achievement shouldn't
+  // vanish when someone changes the range picker.
+  {
+    if (b.maxCompactions === 0) {
+      add('deep_diver', false, 0, 'Not applicable — no compaction telemetry in this org');
+    } else {
+      add(
+        'deep_diver',
+        i.compactions >= DEEP_DIVER_COMPACTIONS,
+        i.compactions / DEEP_DIVER_COMPACTIONS,
+        `${fmt(i.compactions)} / ${fmt(DEEP_DIVER_COMPACTIONS)} compactions (all-time)`,
       );
     }
   }

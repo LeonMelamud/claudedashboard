@@ -151,6 +151,13 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     description: 'Delegates to subagents — and they deliver.',
     rule: '≥ 25 subagent runs across ≥ 2 agent types with ≥ 90% success.',
   },
+  deep_diver: {
+    id: 'deep_diver',
+    name: 'Deep Diver',
+    emoji: '🤿',
+    description: 'Works sessions so long they outgrow the context window — and keeps going.',
+    rule: '≥ 25 context compactions all-time (counted over history, not the selected range).',
+  },
 };
 
 export interface SegmentMeta {
