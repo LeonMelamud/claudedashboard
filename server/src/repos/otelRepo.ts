@@ -201,6 +201,33 @@ export interface UserRollupRow {
   top_skill: string | null;
 }
 
+/** Per-user aggregates powering the value-delivery badges. Field names match ScoringInput. */
+export interface UserBadgeStats {
+  skillInvocations: number;
+  distinctSkills: number;
+  mcpCalls: number;
+  mcpFailures: number;
+  activeMcpServers: number;
+  subagentRuns: number;
+  subagentSuccesses: number;
+  distinctAgentTypes: number;
+  planModeEntries: number;
+  plansAccepted: number;
+}
+
+export const EMPTY_BADGE_STATS: UserBadgeStats = {
+  skillInvocations: 0,
+  distinctSkills: 0,
+  mcpCalls: 0,
+  mcpFailures: 0,
+  activeMcpServers: 0,
+  subagentRuns: 0,
+  subagentSuccesses: 0,
+  distinctAgentTypes: 0,
+  planModeEntries: 0,
+  plansAccepted: 0,
+};
+
 export interface OtelTotals {
   skillInvocations: number;
   distinctSkills: number;
@@ -494,6 +521,92 @@ export class OtelRepo {
   // -------------------------------------------------------------------------
   // Route aggregates
   // -------------------------------------------------------------------------
+
+  /** Per-user stats for the value-delivery badges — one GROUP BY query per table. */
+  perUserBadgeStats(from: string, to: string): Map<number, UserBadgeStats> {
+    const params = { from, to };
+    const byUser = new Map<number, UserBadgeStats>();
+    const acc = (userId: number): UserBadgeStats => {
+      let s = byUser.get(userId);
+      if (!s) {
+        s = { ...EMPTY_BADGE_STATS };
+        byUser.set(userId, s);
+      }
+      return s;
+    };
+
+    const skills = this.db
+      .prepare(
+        `SELECT user_id, COUNT(DISTINCT skill_name) AS distinct_skills,
+                COALESCE(SUM(invocations), 0) AS skill_invocations
+         FROM otel_skill_daily WHERE date BETWEEN @from AND @to GROUP BY user_id`,
+      )
+      .all(params) as Array<{ user_id: number; distinct_skills: number; skill_invocations: number }>;
+    for (const r of skills) {
+      const s = acc(r.user_id);
+      s.distinctSkills = r.distinct_skills;
+      s.skillInvocations = r.skill_invocations;
+    }
+
+    const mcp = this.db
+      .prepare(
+        `SELECT user_id, COALESCE(SUM(tool_calls), 0) AS mcp_calls,
+                COALESCE(SUM(tool_failures), 0) AS mcp_failures
+         FROM otel_mcp_daily WHERE date BETWEEN @from AND @to GROUP BY user_id`,
+      )
+      .all(params) as Array<{ user_id: number; mcp_calls: number; mcp_failures: number }>;
+    for (const r of mcp) {
+      const s = acc(r.user_id);
+      s.mcpCalls = r.mcp_calls;
+      s.mcpFailures = r.mcp_failures;
+    }
+
+    const servers = this.db
+      .prepare(
+        `SELECT user_id, COUNT(*) AS active_servers FROM (
+           SELECT user_id, server_name, SUM(tool_calls) AS calls
+           FROM otel_mcp_daily WHERE date BETWEEN @from AND @to
+           GROUP BY user_id, server_name HAVING calls >= 10
+         ) GROUP BY user_id`,
+      )
+      .all(params) as Array<{ user_id: number; active_servers: number }>;
+    for (const r of servers) acc(r.user_id).activeMcpServers = r.active_servers;
+
+    const agents = this.db
+      .prepare(
+        `SELECT user_id, COALESCE(SUM(invocations), 0) AS runs,
+                COALESCE(SUM(success), 0) AS successes,
+                COUNT(DISTINCT subagent_type) AS types
+         FROM otel_agent_daily WHERE date BETWEEN @from AND @to GROUP BY user_id`,
+      )
+      .all(params) as Array<{ user_id: number; runs: number; successes: number; types: number }>;
+    for (const r of agents) {
+      const s = acc(r.user_id);
+      s.subagentRuns = r.runs;
+      s.subagentSuccesses = r.successes;
+      s.distinctAgentTypes = r.types;
+    }
+
+    const plan = this.db
+      .prepare(
+        `SELECT user_id, COALESCE(SUM(changes), 0) AS entries
+         FROM otel_permission_mode_daily
+         WHERE mode = 'plan' AND date BETWEEN @from AND @to GROUP BY user_id`,
+      )
+      .all(params) as Array<{ user_id: number; entries: number }>;
+    for (const r of plan) acc(r.user_id).planModeEntries = r.entries;
+
+    const exitPlan = this.db
+      .prepare(
+        `SELECT user_id, COALESCE(SUM(accepted), 0) AS plans
+         FROM otel_tool_daily
+         WHERE tool_name = 'ExitPlanMode' AND date BETWEEN @from AND @to GROUP BY user_id`,
+      )
+      .all(params) as Array<{ user_id: number; plans: number }>;
+    for (const r of exitPlan) acc(r.user_id).plansAccepted = r.plans;
+
+    return byUser;
+  }
 
   skillTotals(from: string, to: string, scope: OtelScope = {}): SkillTotalsRow[] {
     const { fromSql, whereSql } = scopeSql('otel_skill_daily', scope);

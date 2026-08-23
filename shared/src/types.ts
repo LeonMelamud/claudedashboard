@@ -20,12 +20,18 @@ export type BadgeId =
   | 'streak_bronze'
   | 'streak_silver'
   | 'streak_gold'
+  | 'streak_kryptonite'
   | 'polyglot'
   | 'marathon'
   | 'high_output'
   | 'efficient'
   | 'high_acceptance'
-  | 'experimenting';
+  | 'experimenting'
+  | 'skill_smith'
+  | 'plan_first'
+  | 'dream_builder'
+  | 'well_connected'
+  | 'orchestrator';
 
 // ---------------------------------------------------------------------------
 // Core entities

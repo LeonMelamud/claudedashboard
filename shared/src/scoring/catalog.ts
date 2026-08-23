@@ -67,6 +67,13 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     description: 'A whole month of showing up, every single workday.',
     rule: 'Best run of 20 active days in a row in the last 90, on your own work week.',
   },
+  streak_kryptonite: {
+    id: 'streak_kryptonite',
+    name: 'Streak · Kryptonite',
+    emoji: '💚',
+    description: 'Workaholic — forty days of showing up, every single workday.',
+    rule: 'Best run of 40 active days in a row in the last 90, on your own work week — zero misses.',
+  },
   polyglot: {
     id: 'polyglot',
     name: 'Polyglot',
@@ -108,6 +115,41 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     emoji: '🧪',
     description: 'Deep in exploration — the output is coming.',
     rule: 'Adoption score ≥ 60 while impact is still < 40. Keep going!',
+  },
+  skill_smith: {
+    id: 'skill_smith',
+    name: 'Skill Smith',
+    emoji: '🧰',
+    description: 'Reaches for the right skill instead of raw prompting.',
+    rule: '≥ 5 distinct skills used and ≥ 20 skill invocations in the range.',
+  },
+  plan_first: {
+    id: 'plan_first',
+    name: 'Plan-First',
+    emoji: '🧭',
+    description: 'Thinks before building — plan mode is a habit.',
+    rule: 'Entered plan mode ≥ 10 times in the range.',
+  },
+  dream_builder: {
+    id: 'dream_builder',
+    name: 'Dream Builder',
+    emoji: '🧞',
+    description: 'Turns approved plans into shipped work.',
+    rule: '≥ 5 plans approved (ExitPlanMode accepted) and ≥ 15 commits in the range.',
+  },
+  well_connected: {
+    id: 'well_connected',
+    name: 'Well Connected',
+    emoji: '🔌',
+    description: 'Wires MCP tools into the work — and they deliver.',
+    rule: '≥ 150 MCP calls across ≥ 3 active servers (≥ 10 calls each) with ≥ 90% success.',
+  },
+  orchestrator: {
+    id: 'orchestrator',
+    name: 'Orchestrator',
+    emoji: '🎼',
+    description: 'Delegates to subagents — and they deliver.',
+    rule: '≥ 25 subagent runs across ≥ 2 agent types with ≥ 90% success.',
   },
 };
 

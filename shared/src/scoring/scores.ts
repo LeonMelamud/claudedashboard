@@ -30,6 +30,24 @@ export interface ScoringInput {
   currentStreak: number;
   /** longest such run inside the trailing 90d — what streak badges are earned on */
   bestStreak: number;
+  /** total skill invocations in range (otel_skill_daily); 0 = no telemetry */
+  skillInvocations: number;
+  /** distinct skill names in range; collapses to 1 under minimal privacy mode */
+  distinctSkills: number;
+  /** MCP tool calls / failures in range (otel_mcp_daily) */
+  mcpCalls: number;
+  mcpFailures: number;
+  /** MCP servers with >= 10 calls in range */
+  activeMcpServers: number;
+  /** subagent runs (otel_agent_daily invocations) and how many succeeded */
+  subagentRuns: number;
+  subagentSuccesses: number;
+  /** distinct subagent_type values in range */
+  distinctAgentTypes: number;
+  /** switches into plan mode (otel_permission_mode_daily, mode='plan') */
+  planModeEntries: number;
+  /** ExitPlanMode accepted count (otel_tool_daily) — plans approved */
+  plansAccepted: number;
 }
 
 /** Org-wide baselines, computed ONCE per range over the UNFILTERED nonzero-usage population. */
@@ -46,6 +64,15 @@ export interface Baselines {
   p80PullRequests: number;
   p80LinesPerSession: number;
   p90Sessions: number;
+  /** org-wide maxima for the value-delivery badges' "Not applicable" gates */
+  maxSkillInvocations: number;
+  maxDistinctSkills: number;
+  maxMcpCalls: number;
+  maxActiveMcpServers: number;
+  maxSubagentRuns: number;
+  maxDistinctAgentTypes: number;
+  maxPlanModeEntries: number;
+  maxPlansAccepted: number;
   /** population size the baselines were computed over */
   sampleSize: number;
 }
@@ -108,6 +135,14 @@ export function computeBaselines(population: ScoringInput[]): Baselines {
     p80PullRequests: percentile(values((u) => u.pullRequests), 80),
     p80LinesPerSession: percentile(values(linesPerSession), 80),
     p90Sessions: percentile(values((u) => u.sessions), 90),
+    maxSkillInvocations: max((u) => u.skillInvocations),
+    maxDistinctSkills: max((u) => u.distinctSkills),
+    maxMcpCalls: max((u) => u.mcpCalls),
+    maxActiveMcpServers: max((u) => u.activeMcpServers),
+    maxSubagentRuns: max((u) => u.subagentRuns),
+    maxDistinctAgentTypes: max((u) => u.distinctAgentTypes),
+    maxPlanModeEntries: max((u) => u.planModeEntries),
+    maxPlansAccepted: max((u) => u.plansAccepted),
     sampleSize: active.length,
   };
 }

@@ -39,6 +39,16 @@ function makeInput(overrides: Partial<ScoringInput> = {}): ScoringInput {
     earlyShare: 0.1,
     currentStreak: 6,
     bestStreak: 6,
+    skillInvocations: 25,
+    distinctSkills: 6,
+    mcpCalls: 200,
+    mcpFailures: 10,
+    activeMcpServers: 4,
+    subagentRuns: 30,
+    subagentSuccesses: 29,
+    distinctAgentTypes: 3,
+    planModeEntries: 12,
+    plansAccepted: 6,
     ...overrides,
   };
 }
@@ -355,12 +365,17 @@ describe('badges', () => {
     expect(map.get('streak_bronze')!.earned).toBe(true);
     expect(map.get('streak_silver')!.earned).toBe(false);
   });
-  it('streak tiers at 5/10/20', () => {
+  it('streak tiers at 5/10/20/40', () => {
     const map = badgesFor(makeInput({ currentStreak: 11 }));
     expect(map.get('streak_bronze')!.earned).toBe(true);
     expect(map.get('streak_silver')!.earned).toBe(true);
     expect(map.get('streak_gold')!.earned).toBe(false);
     expect(map.get('streak_gold')!.progress).toBeCloseTo(0.55);
+    expect(map.get('streak_kryptonite')!.earned).toBe(false);
+    expect(map.get('streak_kryptonite')!.progress).toBeCloseTo(0.275);
+    const workaholic = badgesFor(makeInput({ currentStreak: 40, bestStreak: 40 }));
+    expect(workaholic.get('streak_kryptonite')!.earned).toBe(true);
+    expect(badgesFor(makeInput({ currentStreak: 39, bestStreak: 39 })).get('streak_kryptonite')!.earned).toBe(false);
   });
 
   it('polyglot needs 3 models at >=5% share', () => {
@@ -375,6 +390,94 @@ describe('badges', () => {
     expect(yes.get('high_acceptance')!.earned).toBe(true);
     const tooFew = badgesFor(makeInput({ toolAccepted: 9, toolRejected: 1 }));
     expect(tooFew.get('high_acceptance')!.earned).toBe(false);
+  });
+
+  it('skill_smith needs breadth AND volume', () => {
+    expect(badgesFor(makeInput({ distinctSkills: 4, skillInvocations: 50 })).get('skill_smith')!.earned).toBe(false);
+    expect(badgesFor(makeInput({ distinctSkills: 5, skillInvocations: 20 })).get('skill_smith')!.earned).toBe(true);
+  });
+
+  it('plan_first earns at 10 entries with linear progress below', () => {
+    expect(badgesFor(makeInput({ planModeEntries: 10 })).get('plan_first')!.earned).toBe(true);
+    const below = badgesFor(makeInput({ planModeEntries: 9 })).get('plan_first')!;
+    expect(below.earned).toBe(false);
+    expect(below.progress).toBeCloseTo(0.9);
+  });
+
+  it('dream_builder needs approved plans AND commits', () => {
+    expect(badgesFor(makeInput({ plansAccepted: 5, commits: 14 })).get('dream_builder')!.earned).toBe(false);
+    expect(badgesFor(makeInput({ plansAccepted: 4, commits: 30 })).get('dream_builder')!.earned).toBe(false);
+    expect(badgesFor(makeInput({ plansAccepted: 5, commits: 15 })).get('dream_builder')!.earned).toBe(true);
+  });
+
+  it('well_connected enforces the success-rate gate', () => {
+    expect(
+      badgesFor(makeInput({ mcpCalls: 200, mcpFailures: 30, activeMcpServers: 4 })).get('well_connected')!.earned,
+    ).toBe(false);
+    expect(
+      badgesFor(makeInput({ mcpCalls: 200, mcpFailures: 10, activeMcpServers: 4 })).get('well_connected')!.earned,
+    ).toBe(true);
+  });
+
+  it('orchestrator needs runs, type diversity, and success', () => {
+    expect(
+      badgesFor(makeInput({ subagentRuns: 25, subagentSuccesses: 23, distinctAgentTypes: 2 })).get('orchestrator')!
+        .earned,
+    ).toBe(true);
+    expect(
+      badgesFor(makeInput({ subagentRuns: 25, subagentSuccesses: 23, distinctAgentTypes: 1 })).get('orchestrator')!
+        .earned,
+    ).toBe(false);
+    expect(
+      badgesFor(makeInput({ subagentRuns: 25, subagentSuccesses: 20, distinctAgentTypes: 3 })).get('orchestrator')!
+        .earned,
+    ).toBe(false);
+  });
+
+  it('value badges go not-applicable when the org has no telemetry', () => {
+    const noTelemetry = makeInput({
+      skillInvocations: 0,
+      distinctSkills: 0,
+      mcpCalls: 0,
+      mcpFailures: 0,
+      activeMcpServers: 0,
+      subagentRuns: 0,
+      subagentSuccesses: 0,
+      distinctAgentTypes: 0,
+      planModeEntries: 0,
+      plansAccepted: 0,
+    });
+    const bare = computeBaselines([noTelemetry]);
+    const map = new Map(
+      computeBadges(noTelemetry, bare, computeAxes(noTelemetry, bare)).map((b) => [b.id, b]),
+    );
+    for (const id of ['skill_smith', 'plan_first', 'dream_builder', 'well_connected', 'orchestrator'] as const) {
+      expect(map.get(id)!.earned).toBe(false);
+      expect(map.get(id)!.detail).toContain('Not applicable');
+    }
+  });
+
+  it('name-collapse gates go not-applicable with a privacy message, not "no telemetry"', () => {
+    // minimal privacy mode: volume survives, distinct names collapse to 1
+    const redacted = makeInput({
+      distinctSkills: 1,
+      skillInvocations: 80,
+      activeMcpServers: 1,
+      mcpCalls: 400,
+      distinctAgentTypes: 1,
+      subagentRuns: 60,
+      subagentSuccesses: 58,
+    });
+    const bare = computeBaselines([redacted]);
+    const map = new Map(computeBadges(redacted, bare, computeAxes(redacted, bare)).map((b) => [b.id, b]));
+    for (const id of ['skill_smith', 'well_connected', 'orchestrator'] as const) {
+      expect(map.get(id)!.earned).toBe(false);
+      expect(map.get(id)!.detail).toContain('Not applicable');
+      expect(map.get(id)!.detail).not.toContain('no skill telemetry');
+      expect(map.get(id)!.detail).not.toContain('no MCP telemetry');
+      expect(map.get(id)!.detail).not.toContain('no subagent telemetry');
+      expect(map.get(id)!.detail).toContain('hidden');
+    }
   });
 
   it('progress is clamped to 1 and reported earned at 1', () => {
