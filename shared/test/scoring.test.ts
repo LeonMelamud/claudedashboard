@@ -42,6 +42,7 @@ function makeInput(overrides: Partial<ScoringInput> = {}): ScoringInput {
     modelTokens: { 'claude-fable-5': 3_500_000, 'claude-haiku-4-5': 500_000 },
     nightShare: 0.05,
     earlyShare: 0.1,
+    habitActiveDays: 15,
     currentStreak: 6,
     bestStreak: 6,
     skillInvocations: 25,
@@ -99,6 +100,19 @@ describe('resolveTargets', () => {
       flat: 'nope',
     });
     expect(t).toEqual(DEFAULT_SCORE_TARGETS);
+  });
+  it('accepts midnight as a window bound but rejects impossible shares', () => {
+    const t = resolveTargets({
+      timeBadges: { nightStartHour: 0, earlyShare: 3, nightShare: 0.25, minActiveDays: 2.5 },
+    });
+    expect(t.timeBadges.nightStartHour).toBe(0); // hour 0 is legal, not "falsy"
+    expect(t.timeBadges.nightShare).toBe(0.25);
+    expect(t.timeBadges.earlyShare).toBe(DEFAULT_SCORE_TARGETS.timeBadges.earlyShare); // >1
+    expect(t.timeBadges.minActiveDays).toBe(DEFAULT_SCORE_TARGETS.timeBadges.minActiveDays); // non-int
+  });
+  it('fills the whole timeBadges group for targets stored before it existed', () => {
+    const legacy = { perWorkday: { sessions: 9 }, flat: { linesPerSession: 400 } };
+    expect(resolveTargets(legacy).timeBadges).toEqual(DEFAULT_SCORE_TARGETS.timeBadges);
   });
 });
 
@@ -382,7 +396,7 @@ describe('coverage-gated Impact weights', () => {
     const noPrOrg = [makeInput({ pullRequests: 0 }), makeInput({ userId: 2, pullRequests: 0 })];
     const b = computeBaselines(noPrOrg);
     const axes = computeAxes(noPrOrg[0]!, TARGETS, { pullRequests: 0, commits: 1 });
-    const badge = computeBadges(noPrOrg[0]!, b, axes).find((x) => x.id === 'pr_machine')!;
+    const badge = computeBadges(noPrOrg[0]!, b, axes, TARGETS).find((x) => x.id === 'pr_machine')!;
     expect(badge.earned).toBe(false);
     expect(badge.progress).toBe(0);
     expect(badge.detail).toMatch(/not applicable/i);
@@ -410,9 +424,9 @@ describe('badges', () => {
   ];
   const baselines = computeBaselines(population);
 
-  function badgesFor(input: ScoringInput) {
-    const axes = computeAxes(input, TARGETS, FULL_COVERAGE);
-    return new Map(computeBadges(input, baselines, axes).map((b) => [b.id, b]));
+  function badgesFor(input: ScoringInput, targets = TARGETS) {
+    const axes = computeAxes(input, targets, FULL_COVERAGE);
+    return new Map(computeBadges(input, baselines, axes, targets).map((b) => [b.id, b]));
   }
 
   it('cache master needs ratio AND volume', () => {
@@ -427,14 +441,80 @@ describe('badges', () => {
   });
 
   it('night owl and early bird are mutually exclusive', () => {
-    const map = badgesFor(makeInput({ nightShare: 0.45, earlyShare: 0.35, activeDays: 15 }));
+    const map = badgesFor(makeInput({ nightShare: 0.45, earlyShare: 0.35, habitActiveDays: 15 }));
     expect(map.get('night_owl')!.earned).toBe(true);
     expect(map.get('early_bird')!.earned).toBe(false);
   });
 
   it('time badges require 10 active days', () => {
-    const map = badgesFor(makeInput({ nightShare: 0.5, activeDays: 5 }));
+    const map = badgesFor(makeInput({ nightShare: 0.5, habitActiveDays: 5 }));
     expect(map.get('night_owl')!.earned).toBe(false);
+  });
+
+  it('early bird clears its own lower bar', () => {
+    // 18% of activity before 10:00 earns Early Bird (bar 15%) even though the
+    // same share would be nowhere near Night Owl's 30%.
+    const map = badgesFor(makeInput({ nightShare: 0, earlyShare: 0.18, habitActiveDays: 12 }));
+    expect(map.get('early_bird')!.earned).toBe(true);
+    expect(map.get('night_owl')!.earned).toBe(false);
+  });
+
+  it('a qualifying share is never blocked by a sub-threshold one', () => {
+    // night 20% misses its 30% bar; early 16% clears its 15% one. The old raw
+    // `night >= early` tie-break vetoed early here and awarded nothing.
+    const map = badgesFor(makeInput({ nightShare: 0.2, earlyShare: 0.16, habitActiveDays: 12 }));
+    expect(map.get('early_bird')!.earned).toBe(true);
+    expect(map.get('night_owl')!.earned).toBe(false);
+  });
+
+  it('the active-days gate is folded into progress, never contradicting the caption', () => {
+    // A real 14% night share with only 7 active days used to show a 0% bar
+    // next to a "14% of activity" caption. Progress is now the binding
+    // constraint of the two, and the share is what binds here (0.14/0.30).
+    const map = badgesFor(makeInput({ nightShare: 0.14, earlyShare: 0, habitActiveDays: 7 }));
+    const owl = map.get('night_owl')!;
+    expect(owl.earned).toBe(false);
+    expect(owl.progress).toBeCloseTo(0.14 / 0.3);
+    expect(owl.detail).toContain('14%');
+  });
+
+  it('the active-days gate binds progress when it is the weaker term', () => {
+    // Share already clears 30%, but 3 active days is a third of the way to
+    // eligible — the bar must show that, not a full one.
+    const map = badgesFor(makeInput({ nightShare: 0.5, earlyShare: 0, habitActiveDays: 3 }));
+    const owl = map.get('night_owl')!;
+    expect(owl.earned).toBe(false);
+    expect(owl.progress).toBeCloseTo(0.3);
+  });
+
+  it('time badge captions name the configured window', () => {
+    const map = badgesFor(makeInput());
+    expect(map.get('early_bird')!.detail).toContain('05:00–10:00');
+    expect(map.get('night_owl')!.detail).toContain('22:00–05:00');
+  });
+
+  it('honours org-configured windows and shares', () => {
+    const targets = resolveTargets({
+      timeBadges: { earlyShare: 0.4, earlyEndHour: 9 },
+    });
+    const map = badgesFor(makeInput({ earlyShare: 0.18, habitActiveDays: 12 }), targets);
+    expect(map.get('early_bird')!.earned).toBe(false);
+    expect(map.get('early_bird')!.detail).toContain('05:00–09:00');
+  });
+
+  it('experimenting is not applicable once impact arrives', () => {
+    const champion = badgesFor(makeInput({ linesAdded: 40_000, commits: 90, pullRequests: 30 }));
+    const badge = champion.get('experimenting')!;
+    expect(badge.earned).toBe(false);
+    expect(badge.detail).toMatch(/not applicable/i);
+  });
+
+  it('experimenting still lights up for a real explorer', () => {
+    const explorer = badgesFor(
+      makeInput({ sessions: 90, toolAccepted: 400, toolRejected: 20, linesAdded: 0, commits: 0, pullRequests: 0 }),
+    );
+    const badge = explorer.get('experimenting')!;
+    expect(badge.earned).toBe(true);
   });
 
   it('keeps a streak badge earned after the run breaks', () => {
@@ -527,7 +607,7 @@ describe('badges', () => {
     });
     const bare = computeBaselines([noTelemetry]);
     const map = new Map(
-      computeBadges(noTelemetry, bare, computeAxes(noTelemetry, TARGETS, FULL_COVERAGE)).map((b) => [b.id, b]),
+      computeBadges(noTelemetry, bare, computeAxes(noTelemetry, TARGETS, FULL_COVERAGE), TARGETS).map((b) => [b.id, b]),
     );
     for (const id of [
       'skill_smith',
@@ -563,6 +643,7 @@ describe('badges', () => {
         activeNoCompactions,
         bl,
         computeAxes(activeNoCompactions, TARGETS, FULL_COVERAGE),
+        TARGETS,
       ).map((b) => [b.id, b]),
     );
     expect(map.get('deep_diver')!.detail).not.toContain('Not applicable');
@@ -589,7 +670,7 @@ describe('badges', () => {
       subagentSuccesses: 58,
     });
     const bare = computeBaselines([redacted]);
-    const map = new Map(computeBadges(redacted, bare, computeAxes(redacted, TARGETS, FULL_COVERAGE)).map((b) => [b.id, b]));
+    const map = new Map(computeBadges(redacted, bare, computeAxes(redacted, TARGETS, FULL_COVERAGE), TARGETS).map((b) => [b.id, b]));
     for (const id of ['skill_smith', 'well_connected', 'orchestrator'] as const) {
       expect(map.get(id)!.earned).toBe(false);
       expect(map.get(id)!.detail).toContain('Not applicable');
