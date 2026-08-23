@@ -193,7 +193,7 @@ export const SEGMENT_CATALOG: Record<SegmentTier, SegmentMeta> = {
     name: 'Champion',
     emoji: '🏆',
     description: 'Leading the org in both usage and shipped output.',
-    rule: 'Adoption ≥ 70 and impact ≥ 70.',
+    rule: 'Adoption ≥ 80 and impact ≥ 80.',
     cssVar: '--tier-champion',
   },
 };
@@ -204,21 +204,21 @@ export const SEGMENT_ORDER: SegmentTier[] = ['champion', 'producer', 'explorer',
 export const METRIC_GUIDE: Record<string, { name: string; formula: string; explanation: string }> = {
   adoption: {
     name: 'Adoption score',
-    formula: '0.40·N(sessions) + 0.40·(active days ÷ workdays × 100) + 0.20·N(tool decisions)',
+    formula: '0.40·S(sessions) + 0.40·(active days ÷ workdays × 100) + 0.20·S(tool decisions)',
     explanation:
-      'How often and how consistently someone works with Claude Code. N() is a log-normalized score against the org max, so heavy users don’t flatten everyone else.',
+      'How often and how consistently someone works with Claude Code. S() scores against a fixed target scaled to the range’s workdays (√ curve, capped at 100) — your score depends only on your own work, never on how much anyone else did.',
   },
   impact: {
     name: 'Impact score',
-    formula: '0.40·N(lines added) + 0.30·N(commits) + 0.30·N(pull requests)',
+    formula: '0.40·S(lines added) + 0.30·S(commits) + 0.30·S(pull requests)',
     explanation:
-      'Shipped output attributable to Claude Code: code written, committed, and PR’d. In orgs without a GitHub PR flow the PR weight is automatically redistributed to lines and commits.',
+      'Shipped output attributable to Claude Code: code written, committed, and PR’d. A term fewer than 25% of active users can produce (trailing 90 days — e.g. PR counting is GitHub-only) redistributes its weight to the others.',
   },
   efficiency: {
     name: 'Efficiency score',
-    formula: '0.40·N(lines/session) + 0.30·N(lines/$) + 0.30·(cache ratio × 100)',
+    formula: '0.35·S(lines/session) + 0.45·S(lines/$) + 0.20·(cache ratio × 100)',
     explanation:
-      'Output per unit of effort and money. Cache ratio rewards reusing context instead of re-paying for it. Halved below 10 sessions (low confidence).',
+      'Output per unit of effort and money — lines per dollar carries the axis: shipping a lot at low cost is the strongest efficiency signal. Halved below 10 sessions (low confidence).',
   },
   trust: {
     name: 'Trust score',
@@ -367,7 +367,7 @@ export const METRIC_GUIDE: Record<string, { name: string; formula: string; expla
     name: 'Adoption × Impact',
     formula: 'each dot = one person, positioned by their Adoption and Impact scores',
     explanation:
-      'Top-right (≥70/≥70) is Champion territory; high adoption with low impact means lots of usage that isn’t landing as shipped code yet — a coaching opportunity, not a failure.',
+      'Top-right (≥80/≥80) is Champion territory; high adoption with low impact means lots of usage that isn’t landing as shipped code yet — a coaching opportunity, not a failure.',
   },
   segmentDistribution: {
     name: 'Segment distribution',

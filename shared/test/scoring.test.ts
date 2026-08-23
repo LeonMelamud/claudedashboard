@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalize, percentile } from '../src/scoring/normalize.js';
+import { score, percentile } from '../src/scoring/normalize.js';
+import {
+  COVERAGE_MIN,
+  DEFAULT_SCORE_TARGETS,
+  resolveTargets,
+} from '../src/scoring/targets.js';
 import {
   GUARDS,
   computeAxes,
@@ -53,20 +58,46 @@ function makeInput(overrides: Partial<ScoringInput> = {}): ScoringInput {
   };
 }
 
-describe('normalize', () => {
-  it('is 0 at zero and 100 at the max', () => {
-    expect(normalize(0, 100)).toBe(0);
-    expect(normalize(100, 100)).toBe(100);
+describe('score (fixed-target sqrt)', () => {
+  it('is 0 at zero and 100 at the target', () => {
+    expect(score(0, 100)).toBe(0);
+    expect(score(100, 100)).toBe(100);
   });
-  it('clamps above the max instead of exceeding 100', () => {
-    expect(normalize(500, 100)).toBe(100);
+  it('caps past the target — inflation does not pay', () => {
+    expect(score(500, 100)).toBe(100);
+    expect(score(1_000_000, 100)).toBe(100);
   });
-  it('handles a zero max without NaN', () => {
-    expect(normalize(10, 0)).toBe(0);
+  it('handles a zero target without NaN', () => {
+    expect(score(10, 0)).toBe(0);
   });
-  it('compresses whales (log curve)', () => {
-    // half the max should score well above 50 on a log scale
-    expect(normalize(50, 100)).toBeGreaterThan(80);
+  it('grades every metric on the same curve: half the target = 70.7', () => {
+    expect(score(50, 100)).toBeCloseTo(70.7, 1);
+    expect(score(700, 1400)).toBeCloseTo(70.7, 1);
+  });
+  it('locks the curve to exact values', () => {
+    expect(score(40, 168)).toBeCloseTo(48.795, 3);
+    expect(score(84, 168)).toBeCloseTo(70.711, 3);
+    expect(Number.isFinite(score(1, Number.MAX_SAFE_INTEGER))).toBe(true);
+  });
+});
+
+describe('resolveTargets', () => {
+  it('returns defaults with no override', () => {
+    expect(resolveTargets()).toEqual(DEFAULT_SCORE_TARGETS);
+    expect(resolveTargets(null)).toEqual(DEFAULT_SCORE_TARGETS);
+  });
+  it('merges a partial override over defaults', () => {
+    const t = resolveTargets({ perWorkday: { sessions: 12 } });
+    expect(t.perWorkday.sessions).toBe(12);
+    expect(t.perWorkday.commits).toBe(DEFAULT_SCORE_TARGETS.perWorkday.commits);
+    expect(t.flat).toEqual(DEFAULT_SCORE_TARGETS.flat);
+  });
+  it('ignores malformed values instead of breaking scoring', () => {
+    const t = resolveTargets({
+      perWorkday: { sessions: -5, linesAdded: 'lots', commits: 0 },
+      flat: 'nope',
+    });
+    expect(t).toEqual(DEFAULT_SCORE_TARGETS);
   });
 });
 
@@ -227,16 +258,19 @@ describe('workweek (Israel, Sun–Thu)', () => {
   });
 });
 
-describe('baselines', () => {
+describe('baselines (badges only)', () => {
   it('excludes zero-usage users from the population', () => {
     const b = computeBaselines([
       makeInput({ sessions: 0, linesAdded: 999_999 }),
       makeInput({ sessions: 10, linesAdded: 100 }),
     ]);
     expect(b.sampleSize).toBe(1);
-    expect(b.maxLinesAdded).toBe(100);
+    expect(b.p80LinesAdded).toBe(100);
   });
 });
+
+const TARGETS = DEFAULT_SCORE_TARGETS;
+const FULL_COVERAGE = { pullRequests: 1, commits: 1 };
 
 describe('axis scores and guards', () => {
   const population = [
@@ -244,11 +278,10 @@ describe('axis scores and guards', () => {
     makeInput({ userId: 2, sessions: 80, linesAdded: 20_000, commits: 60, pullRequests: 15 }),
     makeInput({ userId: 3, sessions: 5, linesAdded: 200, commits: 1, pullRequests: 0, activeDays: 4 }),
   ];
-  const baselines = computeBaselines(population);
 
   it('scores are within 0..100', () => {
     for (const input of population) {
-      const axes = computeAxes(input, baselines);
+      const axes = computeAxes(input, TARGETS, FULL_COVERAGE);
       for (const v of [axes.adoption, axes.impact, axes.efficiency, axes.trust]) {
         expect(v).toBeGreaterThanOrEqual(0);
         expect(v).toBeLessThanOrEqual(100);
@@ -257,55 +290,97 @@ describe('axis scores and guards', () => {
   });
 
   it('trust is halved below the tool-event guard', () => {
-    const confident = computeAxes(makeInput({ toolAccepted: 60, toolRejected: 40 }), baselines);
-    const sparse = computeAxes(makeInput({ toolAccepted: 6, toolRejected: 4 }), baselines);
+    const confident = computeAxes(makeInput({ toolAccepted: 60, toolRejected: 40 }), TARGETS, FULL_COVERAGE);
+    const sparse = computeAxes(makeInput({ toolAccepted: 6, toolRejected: 4 }), TARGETS, FULL_COVERAGE);
     // identical 60% rate, sparse has < 20 events
     expect(sparse.trustLowConfidence).toBe(true);
     expect(sparse.trust).toBeCloseTo(confident.trust / 2, 0);
   });
 
   it('efficiency is halved below the session guard', () => {
-    const sparse = computeAxes(makeInput({ sessions: 5 }), baselines);
+    const sparse = computeAxes(makeInput({ sessions: 5 }), TARGETS, FULL_COVERAGE);
     expect(sparse.efficiencyLowConfidence).toBe(true);
   });
 
   it('composite is withheld under 3 active days', () => {
-    const axes = computeAxes(makeInput({ activeDays: 2 }), baselines);
+    const axes = computeAxes(makeInput({ activeDays: 2 }), TARGETS, FULL_COVERAGE);
     expect(axes.composite).toBeNull();
   });
 
   it('trust treats 60% acceptance as perfect', () => {
-    const axes = computeAxes(makeInput({ toolAccepted: 60, toolRejected: 40 }), baselines);
+    const axes = computeAxes(makeInput({ toolAccepted: 60, toolRejected: 40 }), TARGETS, FULL_COVERAGE);
     expect(axes.trust).toBe(100);
+  });
+
+  it('locks the axes to exact values for a known input (no population term exists)', () => {
+    // hand-computed from DEFAULT_SCORE_TARGETS for makeInput()'s 22-workday
+    // fixture — population independence is structural (computeAxes takes no
+    // population input), so what needs locking is the formula itself
+    const axes = computeAxes(makeInput(), TARGETS, FULL_COVERAGE);
+    expect(axes.adoption).toBeCloseTo(52.4, 1);
+    expect(axes.impact).toBeCloseTo(48.7, 1);
+    expect(axes.efficiency).toBeCloseTo(78.9, 1);
+    expect(axes.trust).toBe(100);
+  });
+
+  it('scales volume targets by the workdays in range', () => {
+    // same per-workday rate over 5 vs 20 workdays -> identical adoption
+    const week = computeAxes(makeInput({ sessions: 40, workdays: 5, activeDays: 5, toolAccepted: 250, toolRejected: 0 }), TARGETS, FULL_COVERAGE);
+    const month = computeAxes(makeInput({ sessions: 160, workdays: 20, activeDays: 20, toolAccepted: 1000, toolRejected: 0 }), TARGETS, FULL_COVERAGE);
+    expect(week.adoption).toBeCloseTo(month.adoption, 1);
+  });
+
+  it('guards a zero-workday (weekend-only) range instead of zeroing scores', () => {
+    const axes = computeAxes(makeInput({ workdays: 0, activeDays: 2 }), TARGETS, FULL_COVERAGE);
+    // volume terms score against max(1, workdays); nothing NaNs or zeroes out
+    expect(axes.impact).toBeGreaterThan(0);
+    expect(Number.isFinite(axes.adoption)).toBe(true);
   });
 });
 
-describe('non-GitHub org adaptation', () => {
-  it('redistributes the PR weight when the org has zero PRs', () => {
-    const noPrOrg = [
-      makeInput({ userId: 1, pullRequests: 0 }),
-      makeInput({ userId: 2, pullRequests: 0, sessions: 80, linesAdded: 20_000, commits: 60 }),
-    ];
-    const b = computeBaselines(noPrOrg);
-    // top user on both remaining components should be able to reach 100 impact
-    const axes = computeAxes(noPrOrg[1]!, b);
-    expect(axes.impact).toBe(100);
+describe('coverage-gated Impact weights', () => {
+  const strong = makeInput({
+    userId: 2,
+    workdays: 21,
+    sessions: 200,
+    linesAdded: 30_000,
+    commits: 160,
+    pullRequests: 0,
+    activeDays: 21,
+  });
+
+  it('redistributes the PR weight below COVERAGE_MIN (e.g. a Bitbucket org)', () => {
+    const low = computeAxes(strong, TARGETS, { pullRequests: 0.16, commits: 0.61 });
+    // 4/7 lines + 3/7 commits, both at/above target -> full impact, no PR penalty
+    expect(low.impact).toBe(100);
+    // with the PR term kept, the same user is penalized for the zero
+    const kept = computeAxes(strong, TARGETS, FULL_COVERAGE);
+    expect(kept.impact).toBeLessThan(100);
+  });
+
+  it('keeps the PR term at/above COVERAGE_MIN', () => {
+    // 3 PRs over 21 workdays is well under the 0.5/wd target, so the kept
+    // term drags Impact below the redistributed variant — the gate must matter
+    const withPrs = makeInput({ ...strong, pullRequests: 3 });
+    const at = computeAxes(withPrs, TARGETS, { pullRequests: COVERAGE_MIN, commits: 1 });
+    const below = computeAxes(withPrs, TARGETS, { pullRequests: COVERAGE_MIN - 0.01, commits: 1 });
+    expect(at.impact).toBeLessThan(below.impact);
+  });
+
+  it('falls back to lines-only when both git terms lack coverage', () => {
+    const axes = computeAxes(strong, TARGETS, { pullRequests: 0, commits: 0 });
+    expect(axes.impact).toBe(100); // lines at target carries the whole axis
   });
 
   it('keeps Champion attainable without PRs', () => {
-    const noPrOrg = [
-      makeInput({ userId: 1, pullRequests: 0, sessions: 20, linesAdded: 1000, commits: 5, activeDays: 8 }),
-      makeInput({ userId: 2, pullRequests: 0, sessions: 80, linesAdded: 20_000, commits: 60, activeDays: 21 }),
-    ];
-    const b = computeBaselines(noPrOrg);
-    const axes = computeAxes(noPrOrg[1]!, b);
+    const axes = computeAxes(strong, TARGETS, { pullRequests: 0.1, commits: 0.61 });
     expect(segmentFor(axes)).toBe('champion');
   });
 
   it('marks PR Machine not-applicable instead of unearnable', () => {
     const noPrOrg = [makeInput({ pullRequests: 0 }), makeInput({ userId: 2, pullRequests: 0 })];
     const b = computeBaselines(noPrOrg);
-    const axes = computeAxes(noPrOrg[0]!, b);
+    const axes = computeAxes(noPrOrg[0]!, TARGETS, { pullRequests: 0, commits: 1 });
     const badge = computeBadges(noPrOrg[0]!, b, axes).find((x) => x.id === 'pr_machine')!;
     expect(badge.earned).toBe(false);
     expect(badge.progress).toBe(0);
@@ -314,14 +389,15 @@ describe('non-GitHub org adaptation', () => {
 });
 
 describe('segments', () => {
-  it('maps the four tiers by adoption x impact', () => {
-    expect(segmentFor({ adoption: 75, impact: 80 })).toBe('champion');
+  it('maps the four tiers by adoption x impact (champion at 80/80)', () => {
+    expect(segmentFor({ adoption: 80, impact: 80 })).toBe('champion');
+    expect(segmentFor({ adoption: 75, impact: 80 })).toBe('producer'); // was champion at 70/70
     expect(segmentFor({ adoption: 55, impact: 45 })).toBe('producer');
     expect(segmentFor({ adoption: 10, impact: 5 })).toBe('starter');
     expect(segmentFor({ adoption: 30, impact: 90 })).toBe('explorer');
   });
   it('champion requires BOTH axes', () => {
-    expect(segmentFor({ adoption: 90, impact: 60 })).toBe('producer');
+    expect(segmentFor({ adoption: 90, impact: 79 })).toBe('producer');
   });
 });
 
@@ -334,7 +410,7 @@ describe('badges', () => {
   const baselines = computeBaselines(population);
 
   function badgesFor(input: ScoringInput) {
-    const axes = computeAxes(input, baselines);
+    const axes = computeAxes(input, TARGETS, FULL_COVERAGE);
     return new Map(computeBadges(input, baselines, axes).map((b) => [b.id, b]));
   }
 
@@ -449,7 +525,7 @@ describe('badges', () => {
     });
     const bare = computeBaselines([noTelemetry]);
     const map = new Map(
-      computeBadges(noTelemetry, bare, computeAxes(noTelemetry, bare)).map((b) => [b.id, b]),
+      computeBadges(noTelemetry, bare, computeAxes(noTelemetry, TARGETS, FULL_COVERAGE)).map((b) => [b.id, b]),
     );
     for (const id of ['skill_smith', 'plan_first', 'dream_builder', 'well_connected', 'orchestrator'] as const) {
       expect(map.get(id)!.earned).toBe(false);
@@ -469,7 +545,7 @@ describe('badges', () => {
       subagentSuccesses: 58,
     });
     const bare = computeBaselines([redacted]);
-    const map = new Map(computeBadges(redacted, bare, computeAxes(redacted, bare)).map((b) => [b.id, b]));
+    const map = new Map(computeBadges(redacted, bare, computeAxes(redacted, TARGETS, FULL_COVERAGE)).map((b) => [b.id, b]));
     for (const id of ['skill_smith', 'well_connected', 'orchestrator'] as const) {
       expect(map.get(id)!.earned).toBe(false);
       expect(map.get(id)!.detail).toContain('Not applicable');

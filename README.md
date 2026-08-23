@@ -167,7 +167,7 @@ Every view honors the global date-range picker and day/week/month granularity; a
 
 ## How scoring works
 
-All formulas live in [shared/src/scoring](shared/src/scoring) — one source of truth executed on the server and reused by the UI for tooltips, so numbers can't drift. In short: four axis scores (Adoption, Impact, Efficiency, Trust) log-normalized against org maxima frozen per date range → segments (Starter → Explorer → Producer → Champion) → 14 badges, most percentile-based so they self-calibrate to org size, with small-sample reliability guards (e.g. acceptance rates under 20 decisions are low-confidence and down-weighted). The in-app **Guide** (book icon, top right) documents every metric and rule in plain language.
+All formulas live in [shared/src/scoring](shared/src/scoring) — one source of truth executed on the server and reused by the UI for tooltips, so numbers can't drift. In short: four axis scores (Adoption, Impact, Efficiency, Trust), each scored against **fixed targets** (√ curve, capped at 100; volume targets are per-workday rates that scale with the selected range, admin-overridable in settings) — so a score is a pure function of that person's own work and one heavy user can never rescale anyone else's numbers → segments (Starter → Explorer → Producer → Champion) → badges, most percentile-based so they self-calibrate to org size, with small-sample reliability guards (e.g. acceptance rates under 20 decisions are low-confidence and down-weighted). Impact terms that fewer than 25% of active users can produce (trailing 90 days — e.g. PR counting is GitHub-only) redistribute their weight automatically. The in-app **Guide** (book icon, top right) documents every metric and rule in plain language.
 
 ## Deploy (Docker)
 

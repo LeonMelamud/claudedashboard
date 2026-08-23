@@ -1,5 +1,6 @@
 import type { AxisScores, SegmentTier } from '../types.js';
-import { normalize, percentile, clamp01 } from './normalize.js';
+import { score, percentile, clamp01 } from './normalize.js';
+import { COVERAGE_MIN, type ImpactCoverage, type ScoreTargets } from './targets.js';
 
 /**
  * Everything the scoring engine needs about one user for one date range.
@@ -50,15 +51,17 @@ export interface ScoringInput {
   plansAccepted: number;
 }
 
-/** Org-wide baselines, computed ONCE per range over the UNFILTERED nonzero-usage population. */
+/**
+ * Org-wide baselines, computed ONCE per range over the UNFILTERED
+ * nonzero-usage population. Used by BADGES ONLY (percentile thresholds with
+ * absolute floors, plus telemetry "not applicable" gates) — axis scores are
+ * measured against fixed `ScoreTargets` and never against the population, so
+ * one person's volume can't move anyone else's score. p80/p90 are robust
+ * stats: a single outlier barely shifts them, unlike a max.
+ */
 export interface Baselines {
-  maxSessions: number;
-  maxToolEvents: number;
-  maxLinesAdded: number;
-  maxCommits: number;
+  /** kept for the pr_machine badge's "not applicable" gate (GitHub-only flow) */
   maxPullRequests: number;
-  maxLinesPerSession: number;
-  maxLinesPerDollar: number;
   p80LinesAdded: number;
   p80Commits: number;
   p80PullRequests: number;
@@ -123,13 +126,7 @@ export function computeBaselines(population: ScoringInput[]): Baselines {
   const max = (f: (u: ScoringInput) => number) => active.reduce((m, u) => Math.max(m, f(u)), 0);
   const values = (f: (u: ScoringInput) => number) => active.map(f);
   return {
-    maxSessions: max((u) => u.sessions),
-    maxToolEvents: max(toolEvents),
-    maxLinesAdded: max((u) => u.linesAdded),
-    maxCommits: max((u) => u.commits),
     maxPullRequests: max((u) => u.pullRequests),
-    maxLinesPerSession: max(linesPerSession),
-    maxLinesPerDollar: max(linesPerDollar),
     p80LinesAdded: percentile(values((u) => u.linesAdded), 80),
     p80Commits: percentile(values((u) => u.commits), 80),
     p80PullRequests: percentile(values((u) => u.pullRequests), 80),
@@ -148,39 +145,45 @@ export function computeBaselines(population: ScoringInput[]): Baselines {
 }
 
 /**
- * The four axis scores + composite.
- *   Adoption   = 0.40·N(sessions) + 0.40·(activeDays/workdays·100) + 0.20·N(toolEvents)
- *   Impact     = 0.40·N(linesAdded) + 0.30·N(commits) + 0.30·N(PRs)
- *   Efficiency = 0.40·N(lines/session) + 0.30·N(lines/$) + 0.30·(cacheRatio·100)
+ * The four axis scores + composite. S() is `score()` — sqrt against a fixed
+ * target (volume targets scale by the range's workdays), so every axis is a
+ * pure function of the user's own row: nobody's score moves because someone
+ * else worked more.
+ *   Adoption   = 0.40·S(sessions) + 0.40·(activeDays/workdays·100) + 0.20·S(toolEvents)
+ *   Impact     = 0.40·S(linesAdded) + 0.30·S(commits) + 0.30·S(PRs)   [coverage-gated]
+ *   Efficiency = 0.35·S(lines/session) + 0.45·S(lines/$) + 0.20·(cacheRatio·100)
  *   Trust      = clamp(acceptanceRate / 0.60, 0, 1) · 100
  *   Composite  = 0.35·Adoption + 0.35·Impact + 0.15·Efficiency + 0.15·Trust
  */
-export function computeAxes(i: ScoringInput, b: Baselines): AxisScores {
+export function computeAxes(i: ScoringInput, t: ScoreTargets, cov: ImpactCoverage): AxisScores {
+  // max(1, …) guards weekend-only ranges, where 0 workdays would zero every target
+  const wd = Math.max(1, i.workdays);
   const consistency = i.workdays > 0 ? Math.min(1, i.activeDays / i.workdays) * 100 : 0;
   const adoption =
-    0.4 * normalize(i.sessions, b.maxSessions) +
+    0.4 * score(i.sessions, t.perWorkday.sessions * wd) +
     0.4 * consistency +
-    0.2 * normalize(toolEvents(i), b.maxToolEvents);
+    0.2 * score(toolEvents(i), t.perWorkday.toolEvents * wd);
 
-  // PRs-by-Claude-Code only exist on GitHub (the PR flow uses the gh CLI).
-  // In orgs on another git host the org max is 0 forever — redistribute that
-  // weight instead of capping everyone's Impact at 70.
-  const impactWeights =
-    b.maxPullRequests > 0
-      ? { lines: 0.4, commits: 0.3, prs: 0.3 }
-      : b.maxCommits > 0
-        ? { lines: 4 / 7, commits: 3 / 7, prs: 0 }
-        : { lines: 1, commits: 0, prs: 0 };
+  // A git-derived term only carries weight where the org can actually produce
+  // it (PR counting is GitHub-only; ThetaRay-style Bitbucket orgs sit at ~0).
+  // Coverage is the trailing-90d share of active users with a nonzero value —
+  // below COVERAGE_MIN the term's weight redistributes proportionally over
+  // the kept terms. Lines is the always-present fallback.
+  const keepPrs = cov.pullRequests >= COVERAGE_MIN;
+  const keepCommits = cov.commits >= COVERAGE_MIN;
+  const keptWeight = 0.4 + (keepCommits ? 0.3 : 0) + (keepPrs ? 0.3 : 0);
   const impact =
-    impactWeights.lines * normalize(i.linesAdded, b.maxLinesAdded) +
-    impactWeights.commits * normalize(i.commits, b.maxCommits) +
-    impactWeights.prs * normalize(i.pullRequests, b.maxPullRequests);
+    (0.4 / keptWeight) * score(i.linesAdded, t.perWorkday.linesAdded * wd) +
+    (keepCommits ? (0.3 / keptWeight) * score(i.commits, t.perWorkday.commits * wd) : 0) +
+    (keepPrs ? (0.3 / keptWeight) * score(i.pullRequests, t.perWorkday.pullRequests * wd) : 0);
 
+  // lines/$ carries the axis: cost-efficiency is the signal people can act
+  // on, while cache ratio saturates near 1.0 org-wide (a near-constant term).
   const ratio = cacheRatio(i) ?? 0;
   let efficiency =
-    0.4 * normalize(linesPerSession(i), b.maxLinesPerSession) +
-    0.3 * normalize(linesPerDollar(i), b.maxLinesPerDollar) +
-    0.3 * (ratio * 100);
+    0.35 * score(linesPerSession(i), t.flat.linesPerSession) +
+    0.45 * score(linesPerDollar(i), t.flat.linesPerDollar) +
+    0.2 * (ratio * 100);
   const efficiencyLowConfidence = i.sessions < GUARDS.minSessions;
   if (efficiencyLowConfidence) efficiency /= 2;
 
@@ -206,10 +209,18 @@ export function computeAxes(i: ScoringInput, b: Baselines): AxisScores {
   };
 }
 
+/** Tier boundaries — the quadrant chart draws its lines from these, so the UI can't drift. */
+export const SEGMENT_THRESHOLDS = {
+  champion: { adoption: 80, impact: 80 },
+  producer: { adoption: 50, impact: 40 },
+  starterBelowAdoption: 20,
+} as const;
+
 /** Two-axis segmentation, evaluated top-down. */
 export function segmentFor(scores: Pick<AxisScores, 'adoption' | 'impact'>): SegmentTier {
-  if (scores.adoption >= 70 && scores.impact >= 70) return 'champion';
-  if (scores.adoption >= 50 && scores.impact >= 40) return 'producer';
-  if (scores.adoption < 20) return 'starter';
+  const s = SEGMENT_THRESHOLDS;
+  if (scores.adoption >= s.champion.adoption && scores.impact >= s.champion.impact) return 'champion';
+  if (scores.adoption >= s.producer.adoption && scores.impact >= s.producer.impact) return 'producer';
+  if (scores.adoption < s.starterBelowAdoption) return 'starter';
   return 'explorer';
 }

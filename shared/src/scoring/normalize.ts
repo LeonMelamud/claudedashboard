@@ -1,8 +1,15 @@
-/** Log-normalized relative score: compresses whales so mid-tier users still see movement. */
-export function normalize(value: number, orgMax: number): number {
-  if (orgMax <= 0 || value <= 0) return 0;
-  const score = (Math.log1p(value) / Math.log1p(orgMax)) * 100;
-  return Math.min(100, Math.max(0, score));
+/**
+ * Score against a fixed target: sqrt curve, capped at 100. A pure function of
+ * the user's own value — nobody else's volume appears in the denominator
+ * (replaces the old log-vs-org-max `normalize`, where one whale rescaled the
+ * whole org). sqrt keeps early progress rewarding (half the target = 70.7)
+ * and — unlike log — grades every metric on the same curve regardless of the
+ * target's magnitude. Values past the target are worth nothing: inflation
+ * doesn't pay.
+ */
+export function score(value: number, target: number): number {
+  if (target <= 0 || value <= 0) return 0;
+  return Math.min(100, Math.sqrt(value / target) * 100);
 }
 
 /** Linear-interpolated percentile over an unsorted sample. p in [0,100]. */
