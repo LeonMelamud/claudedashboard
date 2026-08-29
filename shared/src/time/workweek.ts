@@ -166,7 +166,14 @@ export function expectedWeekdays(
   const occurrences = new Array<number>(7).fill(0);
   const active = new Array<number>(7).fill(0);
   const end = toUtcDate(to).getTime();
-  for (let t = toUtcDate(from).getTime(); t <= end; t += DAY_MS) {
+  // Count occurrences only from the day this person first appears: a window that
+  // predates their onboarding dilutes every weekday below EXPECTED_DAY_RATE, so
+  // a whole org that started recently would have no expected weekdays at all.
+  const firstActive = activeDates.size > 0 ? [...activeDates].sort()[0] : undefined;
+  const start = firstActive
+    ? Math.max(toUtcDate(from).getTime(), toUtcDate(firstActive).getTime())
+    : toUtcDate(from).getTime();
+  for (let t = start; t <= end; t += DAY_MS) {
     const d = new Date(t);
     const wd = d.getUTCDay();
     occurrences[wd] = (occurrences[wd] ?? 0) + 1;
@@ -178,7 +185,11 @@ export function expectedWeekdays(
     const seen = occurrences[wd] ?? 0;
     if (seen > 0 && (active[wd] ?? 0) / seen >= EXPECTED_DAY_RATE) expected.add(wd);
   }
-  return expected;
+  // Nothing cleared the bar — fall back rather than expecting NOTHING. An empty
+  // set makes every idle day bridgeable, which turns the streak into a plain
+  // count of active days: the inverse of the intended guard, and strictly worse
+  // than the no-history case, which does get the fallback.
+  return expected.size === 0 ? fallback : expected;
 }
 
 /** Count Sun–Thu days in [from, to] inclusive. */

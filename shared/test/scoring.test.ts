@@ -255,6 +255,31 @@ describe('workweek (Israel, Sun–Thu)', () => {
     }
   });
 
+  it('falls back when the learned set comes back EMPTY, not just with no history', () => {
+    // One Monday and one Tuesday across four weeks: no weekday clears the 50%
+    // bar, so the learned set is empty. Returning it would leave nothing able to
+    // break a run — every idle day bridges and the streak becomes a plain count
+    // of active days (this read 2 before the fix).
+    const sparse = new Set(['2026-07-06', '2026-07-14']);
+    const learned = expectedWeekdays(sparse, '2026-05-01', '2026-07-31');
+    expect([...learned].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect(currentWorkdayStreak(sparse, '2026-07-14', learned)).toBe(1);
+  });
+
+  it('counts each weekday only from the person\'s first active day', () => {
+    // Onboarded 2026-07-06, then every Mon-Fri. Over a window that starts in May
+    // every weekday sits below the bar and they read as having no work week at
+    // all; measured from their first active day, Mon-Fri is obvious. A rollout
+    // younger than the window put EVERY user in that state.
+    const dates = new Set<string>();
+    for (const d of ['06', '07', '08', '09', '10', '13', '14', '15', '16', '17', '20', '21', '22', '23', '24']) {
+      dates.add(`2026-07-${d}`);
+    }
+    const learned = expectedWeekdays(dates, '2026-05-01', '2026-07-24');
+    expect([...learned].sort()).toEqual([1, 2, 3, 4, 5]);
+    expect(currentWorkdayStreak(dates, '2026-07-24', learned)).toBe(15);
+  });
+
   it('falls back to Sun-Thu only when there is no history', () => {
     expect([...expectedWeekdays(new Set(), '2026-07-05', '2026-07-11')].sort()).toEqual([0, 1, 2, 3, 4]);
   });
