@@ -181,8 +181,9 @@ export function useMcp(q: RangeQ & { userId?: number | undefined }, enabled = tr
 }
 
 /**
- * AI coach notes for one person. Every cache miss costs a model call, so no
- * background refetching: stale for 10 minutes, no retry, no refetch on focus.
+ * Stored AI coach notes for one person — a read that never calls the model
+ * (nothing stored yet → 404 not_generated, and the card offers its button).
+ * Still no background refetching: stale for 10 minutes, no retry, no refetch on focus.
  */
 export function useRecommendations(idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>, enabled: boolean) {
   return useQuery({
@@ -209,6 +210,17 @@ export function useSaveCoachPrompt() {
       // every cached note was cleared server-side — drop the client copies too
       void qc.invalidateQueries({ queryKey: ['recommendations'] });
     },
+  });
+}
+
+/** The card's button: one generation (or the stored notes, if still fresh). */
+export function useGenerateRecommendations() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ idOrEmail, from, to }: { idOrEmail: string; from: string; to: string }) =>
+      api.generateRecommendations(idOrEmail, { from, to }),
+    onSuccess: (data, vars) =>
+      qc.setQueryData(['recommendations', vars.idOrEmail, vars.from, vars.to], data),
   });
 }
 

@@ -3,8 +3,10 @@
  * otherwise assemble the input, ask the model endpoint, validate, sanitise,
  * store. Also the only place that spends money, so the cost guards live here:
  *
+ *   - on demand only: opening a page reads the cache ('cached' mode) and never
+ *     calls the model; a generation needs a click ('generate' / 'force')
  *   - TTL per (person, range); a soft TTL skips even the hash check
- *   - Regenerate: ≥ 10 min apart per key, ≤ 120 generations/hour globally
+ *   - ≤ 120 generations/hour globally; Regenerate also ≥ 10 min apart per key
  *   - single-flight per key (two tabs → one call)
  *   - no activity → canned "nothing to coach on" without a provider call
  *   - provider failure with a cached row → serve it, flagged stale
@@ -38,7 +40,7 @@ export { AiUpstreamError };
 
 export class RateLimitedError extends Error {
   constructor(public readonly retryAfterSec: number) {
-    super(`regenerate is rate-limited; try again in ${Math.ceil(retryAfterSec / 60)} min`);
+    super(`the coach is rate-limited; try again in ${Math.ceil(retryAfterSec / 60)} min`);
     this.name = 'RateLimitedError';
   }
 }
@@ -50,6 +52,22 @@ export class NoMetricsError extends Error {
     this.name = 'NoMetricsError';
   }
 }
+
+/** 'cached' mode found nothing stored for this range — nobody has asked for notes yet. */
+export class NotGeneratedError extends Error {
+  constructor(userId: number, range: RangeParams) {
+    super(`no coaching notes for user ${userId} between ${range.from} and ${range.to} yet`);
+    this.name = 'NotGeneratedError';
+  }
+}
+
+/**
+ * cached   — read only: a stored row (flagged stale when it would have been
+ *            regenerated) or NotGeneratedError; never a model call
+ * generate — the first click: the stored row if still fresh, else one generation
+ * force    — Regenerate: always a new generation, per-key cooldown applies
+ */
+export type CoachMode = 'cached' | 'generate' | 'force';
 
 const REGEN_MIN_INTERVAL_MS = 10 * 60_000;
 const GLOBAL_MAX_PER_HOUR = 120;
@@ -143,13 +161,51 @@ export class RecommendationService {
     this.health = { reachable: false, lastError: message, checkedAt: nowIso() };
   }
 
-  async getOrGenerate(userId: number, range: RangeParams, opts: { force: boolean }): Promise<RecommendationsResponse> {
+  async getOrGenerate(userId: number, range: RangeParams, opts: { mode: CoachMode }): Promise<RecommendationsResponse> {
     const key = `${userId}:${range.from}_${range.to}`;
+    // a read that lands mid-generation gets that generation's answer, not "not generated"
     const running = this.inflight.get(key);
-    if (running && !opts.force) return running;
-    const p = this.run(userId, range, opts.force, key).finally(() => this.inflight.delete(key));
+    if (running && opts.mode !== 'force') return running;
+    if (opts.mode === 'cached') return this.cachedOnly(userId, range);
+    const p = this.run(userId, range, opts.mode === 'force', key).finally(() => this.inflight.delete(key));
     this.inflight.set(key, p);
     return p;
+  }
+
+  /**
+   * The page-open path — never calls the model. A stored row is served, with a
+   * staleReason exactly when `run` would have paid for a new one; no row means
+   * nobody has asked yet (NotGeneratedError → the card's button). A range with
+   * no sessions gets the canned answer, which costs nothing.
+   */
+  private cachedOnly(userId: number, range: RangeParams): RecommendationsResponse {
+    const rangeKey = `${range.from}_${range.to}`;
+    const row = this.repos.aiRecs.get(userId, rangeKey);
+    if (row) return this.fromRow(row, true, this.staleReason(row, userId, range));
+    const assembled = buildRecommendationInputForUser(this.repos, userId, range);
+    if (!assembled) throw new NoMetricsError(userId, range);
+    if (assembled.input.activity.sessions === 0) {
+      const hash = `${assembled.hash}:${guidanceHash(this.repos)}`;
+      return this.store(userId, rangeKey, assembled.input, hash, cannedNoActivity(assembled.input), null, 'none');
+    }
+    throw new NotGeneratedError(userId, range);
+  }
+
+  /** Why `run` would regenerate this stored row (same rules), shown under the notes; null while it is still good. */
+  private staleReason(row: { generated_at: string; input_hash: string }, userId: number, range: RangeParams): string | null {
+    const ttlMs = this.cfg.ttlHours * 3_600_000;
+    const age = Date.now() - Date.parse(row.generated_at);
+    const promptHash = guidanceHash(this.repos);
+    if (!row.input_hash.endsWith(`:${promptHash}`)) {
+      return 'The coaching guidance changed since these notes were written — Regenerate for fresh ones.';
+    }
+    if (age >= ttlMs) return `These notes are over ${this.cfg.ttlHours}h old — Regenerate for fresh ones.`;
+    if (age < ttlMs / 4) return null;
+    const assembled = buildRecommendationInputForUser(this.repos, userId, range);
+    if (assembled && `${assembled.hash}:${promptHash}` !== row.input_hash) {
+      return 'Your numbers have moved since these notes were written — Regenerate for fresh ones.';
+    }
+    return null;
   }
 
   private async run(userId: number, range: RangeParams, force: boolean, key: string): Promise<RecommendationsResponse> {
@@ -161,7 +217,7 @@ export class RecommendationService {
 
     // The cache key covers the numbers AND the prompt in force: an admin edit
     // of the guidance, or a deploy that changes the built-in guidance,
-    // regenerates on the next view even if nothing else moved — including
+    // regenerates on the next click even if nothing else moved — including
     // inside the soft-TTL window, so a prompt change never serves old text.
     const promptHash = guidanceHash(this.repos);
     const combined = (inputHash: string) => `${inputHash}:${promptHash}`;
@@ -175,7 +231,6 @@ export class RecommendationService {
       if (assembled && combined(assembled.hash) === row.input_hash) return this.fromRow(row, true, null);
     }
 
-    if (force) this.checkRegenerateBudget(key);
     assembled ??= buildRecommendationInputForUser(this.repos, userId, range);
     if (!assembled) throw new NoMetricsError(userId, range);
     const { input } = assembled;
@@ -187,6 +242,7 @@ export class RecommendationService {
       return this.store(userId, rangeKey, input, hash, cannedNoActivity(input), null, 'none');
     }
 
+    this.checkBudget(key, force);
     const started = Date.now();
     try {
       const gen = await this.coach.generateJson(systemPrompt, stableStringify(input), RECOMMENDATIONS_JSON_SCHEMA as unknown as Record<string, unknown>);
@@ -234,10 +290,11 @@ export class RecommendationService {
     }
   }
 
-  private checkRegenerateBudget(key: string): void {
+  /** The global hourly cap guards every generation; the per-key cooldown only Regenerate (a first click never waits). */
+  private checkBudget(key: string, forced: boolean): void {
     const now = Date.now();
     const last = this.lastForcedAt.get(key);
-    if (last !== undefined && now - last < REGEN_MIN_INTERVAL_MS) {
+    if (forced && last !== undefined && now - last < REGEN_MIN_INTERVAL_MS) {
       throw new RateLimitedError(Math.ceil((REGEN_MIN_INTERVAL_MS - (now - last)) / 1000));
     }
     while (this.generatedAt.length > 0 && now - (this.generatedAt[0] ?? now) > 3_600_000) this.generatedAt.shift();

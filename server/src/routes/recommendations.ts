@@ -1,5 +1,6 @@
 /**
- * GET  /api/users/:idOrEmail/recommendations?from&to            — cached or fresh coaching notes
+ * GET  /api/users/:idOrEmail/recommendations?from&to            — stored coaching notes only; never calls the model
+ * POST /api/users/:idOrEmail/recommendations/generate?from&to   — the card's button: stored notes if fresh, else one generation
  * POST /api/users/:idOrEmail/recommendations/regenerate?from&to — force a new generation (rate-limited)
  * GET  /api/coach/prompt                                        — built-in + custom guidance, locked contract
  * PUT  /api/coach/prompt  { guidance: string | null }           — admin only (x-admin-password header)
@@ -9,9 +10,10 @@
  * AiCoachErrorCode in @dash/shared. The upstream HTTP status is never echoed:
  *   404 user_not_found         only when :idOrEmail resolves to nobody
  *   404 no_metrics_for_range   the person exists, no metrics snapshot for the range
+ *   404 not_generated          GET only: nothing stored for this range yet — the card offers its button
  *   404 ai_disabled            no key configured, or turned off in Settings (the web hides the card first)
  *   400 range_too_short        fewer than COACH_MIN_RANGE_DAYS calendar days — refused before any model call
- *   429 rate_limited           Regenerate too soon (Retry-After set)
+ *   429 rate_limited           Regenerate too soon, or the hourly generation cap (Retry-After set)
  *   503 model_not_deployed | auth_failed | unreachable   endpoint misconfigured / down
  *   502 anything else the endpoint did wrong on this call
  */
@@ -29,7 +31,7 @@ import { CONFIG_ERROR_CODES } from '../ai/foundryClient';
 import type { AppContext } from '../context';
 import { MAX_GUIDANCE_CHARS, getCoachPrompt, setCoachGuidance } from '../services/coachPrompt';
 import { coachUsage } from '../services/coachUsage';
-import { AiUpstreamError, NoMetricsError, RateLimitedError } from '../services/recommendations';
+import { AiUpstreamError, NoMetricsError, NotGeneratedError, RateLimitedError, type CoachMode } from '../services/recommendations';
 import { adminAuthorized } from './adminAuth';
 import { parseBody, parseRangeQuery } from './shared';
 import { findUser } from './users';
@@ -47,7 +49,7 @@ export function coachEnabled(ctx: AppContext): boolean {
 export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppContext): void {
   const fail = (reply: FastifyReply, status: number, body: ErrorBody): FastifyReply => reply.code(status).send(body);
 
-  const handle = async (req: FastifyRequest, reply: FastifyReply, force: boolean): Promise<RecommendationsResponse | FastifyReply> => {
+  const handle = async (req: FastifyRequest, reply: FastifyReply, mode: CoachMode): Promise<RecommendationsResponse | FastifyReply> => {
     if (!ctx.ai) return fail(reply, 404, { error: 'ai_disabled', message: 'No AI coach key configured (FOUNDRY_API_KEY)' });
     if (!coachEnabled(ctx)) return fail(reply, 404, { error: 'ai_disabled', message: 'The AI coach is turned off in Settings' });
     const { idOrEmail } = req.params as { idOrEmail: string };
@@ -61,13 +63,16 @@ export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppConte
       });
     }
     try {
-      return await ctx.ai.getOrGenerate(user.id, { from: q.from, to: q.to }, { force });
+      return await ctx.ai.getOrGenerate(user.id, { from: q.from, to: q.to }, { mode });
     } catch (err) {
       if (err instanceof RateLimitedError) {
         return reply
           .code(429)
           .header('Retry-After', String(err.retryAfterSec))
           .send({ error: 'rate_limited', message: err.message, retryAfterSec: err.retryAfterSec });
+      }
+      if (err instanceof NotGeneratedError) {
+        return fail(reply, 404, { error: 'not_generated', message: `No coaching notes for ${q.from} – ${q.to} yet` });
       }
       if (err instanceof NoMetricsError) {
         return fail(reply, 404, { error: 'no_metrics_for_range', message: `No metrics for this person between ${q.from} and ${q.to}` });
@@ -79,8 +84,9 @@ export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppConte
     }
   };
 
-  app.get('/api/users/:idOrEmail/recommendations', (req, reply) => handle(req, reply, false));
-  app.post('/api/users/:idOrEmail/recommendations/regenerate', (req, reply) => handle(req, reply, true));
+  app.get('/api/users/:idOrEmail/recommendations', (req, reply) => handle(req, reply, 'cached'));
+  app.post('/api/users/:idOrEmail/recommendations/generate', (req, reply) => handle(req, reply, 'generate'));
+  app.post('/api/users/:idOrEmail/recommendations/regenerate', (req, reply) => handle(req, reply, 'force'));
 
   const promptInfo = (): CoachPromptResponse =>
     getCoachPrompt(ctx.repos, { enabled: coachEnabled(ctx), adminConfigured: ctx.env.adminPassword !== null });

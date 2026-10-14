@@ -8,13 +8,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AiUpstreamError } from '../src/ai/foundryClient';
 import type { AppContext } from '../src/context';
 import { registerRecommendationRoutes } from '../src/routes/recommendations';
-import { NoMetricsError, RateLimitedError } from '../src/services/recommendations';
+import { NoMetricsError, NotGeneratedError, RateLimitedError } from '../src/services/recommendations';
 
 const USER = { id: 7, actor_type: 'user', email: 'dev@example.com', name: 'Dev' };
 const RANGE = { from: '2026-09-01', to: '2026-09-13' };
 const URL = `/api/users/7/recommendations?from=${RANGE.from}&to=${RANGE.to}`;
 
-function buildApp(opts: { userExists?: boolean; coachEnabled?: boolean; getOrGenerate: () => Promise<unknown> }): FastifyInstance {
+function buildApp(opts: { userExists?: boolean; coachEnabled?: boolean; getOrGenerate: (...args: unknown[]) => Promise<unknown> }): FastifyInstance {
   const users = {
     getById: (id: number) => (opts.userExists !== false && id === USER.id ? USER : undefined),
     getByEmail: (email: string) => (opts.userExists !== false && email === USER.email ? USER : undefined),
@@ -158,5 +158,33 @@ describe('GET /api/users/:idOrEmail/recommendations — error mapping', () => {
     const res = await app.inject({ method: 'GET', url: URL });
     expect(res.statusCode).toBe(404);
     expect((res.json() as { error: string }).error).toBe('ai_disabled');
+  });
+});
+
+describe('on demand — which route may spend tokens', () => {
+  const QS = `?from=${RANGE.from}&to=${RANGE.to}`;
+
+  it.each([
+    ['GET', '/api/users/7/recommendations', 'cached'],
+    ['POST', '/api/users/7/recommendations/generate', 'generate'],
+    ['POST', '/api/users/7/recommendations/regenerate', 'force'],
+  ] as const)('%s %s → mode %s', async (method, path, mode) => {
+    const seen: unknown[] = [];
+    app = buildApp({
+      getOrGenerate: (...args) => {
+        seen.push(args[2]);
+        return Promise.resolve({ summary: 'ok' });
+      },
+    });
+    const res = await app.inject({ method, url: `${path}${QS}` });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual([{ mode }]);
+  });
+
+  it('NotGeneratedError → 404 not_generated (the card shows its button)', async () => {
+    app = buildApp({ getOrGenerate: () => Promise.reject(new NotGeneratedError(USER.id, RANGE)) });
+    const res = await app.inject({ method: 'GET', url: URL });
+    expect(res.statusCode).toBe(404);
+    expect((res.json() as { error: string }).error).toBe('not_generated');
   });
 });
