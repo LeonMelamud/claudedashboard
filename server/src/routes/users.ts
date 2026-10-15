@@ -2,6 +2,7 @@ import {
   COUNTRY_CODES,
   addDays,
   type CalendarDay,
+  type DeleteUserResponse,
   type ModelUsage,
   type TimeseriesPoint,
   type TimeseriesResponse,
@@ -11,6 +12,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../context';
+import { adminAuthorized } from './adminAuth';
 import { toUserDto, type UserRow } from '../repos/userRepo';
 import { buildLeaderboardData, entryForUser } from '../services/scoring';
 import { todayLocal } from '../util/time';
@@ -173,5 +175,27 @@ export function registerUserRoutes(app: FastifyInstance, ctx: AppContext): void 
     const updated = ctx.repos.users.getById(userId);
     if (!updated) return reply.code(404).send({ error: 'user_not_found' });
     return toUserDto(updated);
+  });
+
+  /**
+   * Admin only (x-admin-password): permanently erase a user and every row tied
+   * to them. Irreversible — the web asks for the email to be typed back first.
+   * A later sync or telemetry event for the same person creates a fresh row.
+   */
+  app.delete('/api/users/:id', async (req, reply) => {
+    if (!adminAuthorized(ctx, req, reply)) return reply;
+    const { id } = req.params as { id: string };
+    const userId = Number(id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return reply.code(404).send({ error: 'user_not_found' });
+    }
+    const user = ctx.repos.users.getById(userId);
+    if (!user) return reply.code(404).send({ error: 'user_not_found' });
+    const removed = ctx.repos.users.deleteWithAllData(userId);
+    if (!removed) return reply.code(404).send({ error: 'user_not_found' });
+    const rows = Object.values(removed).reduce((a, b) => a + b, 0);
+    req.log.warn({ userId, actorType: user.actor_type, rows, removed }, 'user deleted with all data by admin');
+    const response: DeleteUserResponse = { deletedUserId: userId, rowsRemoved: rows, tables: removed };
+    return response;
   });
 }

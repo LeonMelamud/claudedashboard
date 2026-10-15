@@ -34,6 +34,7 @@ import {
 } from '@/components/PersonalTelemetry';
 import { SectionHeader } from '@/components/SectionHeader';
 import { CoachCard } from '@/components/CoachCard';
+import { DeleteUserDialog } from '@/components/DeleteUserDialog';
 import { AcceptanceByToolChart, perToolTotal } from '@/components/AcceptanceByTool';
 import { Avatar } from '@/components/Avatar';
 import { CountryFlag } from '@/components/CountryFlag';
@@ -250,6 +251,17 @@ export default function UserProfile() {
         <BadgeCase entry={entry} />
 
         <HiddenChartChips />
+
+        {/* Admin only — the dialog asks for the admin password before anything happens */}
+        <section className="card col-span-12 flex flex-col gap-3 border-risk/30 p-4 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <h2 className="text-sm font-semibold text-risk">Danger zone</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Permanently delete this user and all their data. Requires the admin password and cannot be undone.
+            </p>
+          </div>
+          <DeleteUserDialog user={profile.user} />
+        </section>
       </div>
     </ChartPage>
   );

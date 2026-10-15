@@ -236,6 +236,13 @@ export interface UsersResponse {
   users: UserDto[];
 }
 
+/** DELETE /api/users/:id (admin only) — rows erased, per table and in total. */
+export interface DeleteUserResponse {
+  deletedUserId: number;
+  rowsRemoved: number;
+  tables: Record<string, number>;
+}
+
 export interface CalendarDay {
   date: string;
   sessions: number;

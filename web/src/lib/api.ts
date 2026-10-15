@@ -9,6 +9,7 @@ import type {
   CoachPromptResponse,
   CoachUsageResponse,
   CostsResponse,
+  DeleteUserResponse,
   DimensionsResponse,
   EcosystemResponse,
   EntityDetailResponse,
@@ -141,6 +142,13 @@ export const api = {
 
   setUserCountry: (userId: number, country: string | null) =>
     request<unknown>(`/api/users/${userId}/country`, { method: 'PUT', ...json({ country }) }),
+
+  /** Admin only, irreversible: erases the user and all their data. Password travels in a header. */
+  deleteUser: (userId: number, adminPassword: string) =>
+    request<DeleteUserResponse>(`/api/users/${userId}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-password': adminPassword },
+    }),
 
   teamsSummary: (q: RangeQ) =>
     request<TeamsSummaryResponse>(`/api/teams/summary${qs({ from: q.from, to: q.to })}`),
