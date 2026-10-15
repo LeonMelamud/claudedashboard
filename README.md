@@ -179,6 +179,10 @@ The variable names stay `FOUNDRY_*` for both (the SDK's `ANTHROPIC_FOUNDRY_*` sp
 - **Editable prompt**: Admin → Settings → *AI coach prompt* lets an admin rewrite the coaching guidance (tone, priorities, house practices); the output format stays locked. Saving requires `ADMIN_PASSWORD` from the server's `.env` and clears the cached notes.
 - **Switch & spend**: Admin → Settings → *AI coach* has an on/off switch (default on; anyone can turn it off, turning it back on asks for `ADMIN_PASSWORD`), the model's $/M-token prices (input, output, cache read — set them to your model's rates), and a usage table (generations, tokens and estimated cost for today / 7d / 30d / all time) fed by an append-only ledger of every model call (`GET /api/coach/usage`).
 
+## Deleting a user
+
+An admin can permanently erase a person and every row tied to them: usage history, costs, sessions, telemetry packs, scores, badges and AI coach notes. Open their profile, scroll to **Danger zone**, type their email back and enter `ADMIN_PASSWORD`. There is no undo. If the person keeps using Claude Code, the next sync or telemetry event creates them again as a new user with no history. The API is `DELETE /api/users/:id` with the `x-admin-password` header.
+
 ## Screenshots
 
 *(Demo mode — deterministic synthetic org.)*

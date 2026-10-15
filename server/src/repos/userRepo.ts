@@ -293,6 +293,37 @@ export class UserRepo {
     txn();
   }
 
+  /**
+   * Permanently erase one actor and every row that belongs to it, in one
+   * transaction. The tables are discovered from the live schema (every table
+   * with a `user_id` column) rather than listed by hand, so a table added by a
+   * later migration is covered without touching this method. Child rows that
+   * cascade (usage_daily_models) and team leads (ON DELETE SET NULL) follow
+   * the foreign keys. Returns the rows removed per table, or null when the
+   * user does not exist.
+   */
+  deleteWithAllData(userId: number): Record<string, number> | null {
+    const txn = this.db.transaction((): Record<string, number> | null => {
+      if (!this.getById(userId)) return null;
+      const tables = this.db
+        .prepare(
+          `SELECT m.name AS name FROM sqlite_master m
+           WHERE m.type = 'table' AND m.name <> 'users'
+             AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) c WHERE c.name = 'user_id')
+           ORDER BY m.name`,
+        )
+        .all() as Array<{ name: string }>;
+      const removed: Record<string, number> = {};
+      for (const { name } of tables) {
+        const n = this.db.prepare(`DELETE FROM "${name.replace(/"/g, '""')}" WHERE user_id = ?`).run(userId).changes;
+        if (n > 0) removed[name] = n;
+      }
+      removed.users = this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId).changes;
+      return removed;
+    });
+    return txn();
+  }
+
   /** Previously-rostered users absent from the latest roster fetch → in_roster=0. Never delete. */
   markDeparted(currentRosterIds: number[]): number {
     if (currentRosterIds.length === 0) {

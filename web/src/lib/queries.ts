@@ -402,6 +402,19 @@ export function useSetUserCountry() {
   });
 }
 
+/** Irreversible: erases a user and all their data, then refreshes every data view. */
+export function useDeleteUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, adminPassword }: { userId: number; adminPassword: string }) =>
+      api.deleteUser(userId, adminPassword),
+    onSuccess: () => {
+      // the user drops out of every list, chart and team — refetch them all
+      void qc.invalidateQueries();
+    },
+  });
+}
+
 export function useRunSync() {
   const qc = useQueryClient();
   return useMutation({
