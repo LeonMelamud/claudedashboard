@@ -12,6 +12,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.8',
+    date: '2026-10-15',
+    highlights: [
+      'AI coach runs only when you ask: opening a Personal page shows your stored notes (marked when they are out of date) or a “Get coaching” button — the model is called only on that click or on Regenerate, never just by visiting a profile.',
+      'Admins can permanently delete a user and all of their data from the Danger zone at the bottom of the profile page. The delete is irreversible and needs the user’s email typed back plus the admin password; if that person sends telemetry again later, they come back as a new user with no history.',
+    ],
+  },
+  {
     version: '1.0.7',
     date: '2026-09-14',
     highlights: [
