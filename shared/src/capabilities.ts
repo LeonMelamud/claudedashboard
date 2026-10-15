@@ -82,15 +82,17 @@ export const AI_COACH_OFF: AiCoachStatus = {
 /**
  * Error codes the recommendations routes answer with (body `{ error, message }`):
  *   404 no_metrics_for_range — the person exists but has no metrics snapshot for the range
+ *   404 not_generated        — GET only: nothing stored for the range yet (the card offers its button)
  *   404 user_not_found       — only when the :idOrEmail resolves to nobody
  *   404 ai_disabled          — no key configured, or turned off in Settings
  *   400 range_too_short      — fewer than COACH_MIN_RANGE_DAYS calendar days requested
- *   429 rate_limited         — Regenerate too soon (Retry-After set)
+ *   429 rate_limited         — Regenerate too soon, or the hourly generation cap (Retry-After set)
  *   503 model_not_deployed | auth_failed | unreachable — the endpoint is misconfigured or down
  *   502 upstream_rate_limited | bad_request | upstream_error | bad_answer — the endpoint failed this call
  */
 export type AiCoachErrorCode =
   | 'no_metrics_for_range'
+  | 'not_generated'
   | 'user_not_found'
   | 'ai_disabled'
   | 'range_too_short'

@@ -206,6 +206,12 @@ export const api = {
       `/api/users/${encodeURIComponent(idOrEmail)}/recommendations${qs({ from: q.from, to: q.to })}`,
     ),
 
+  generateRecommendations: (idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>) =>
+    request<RecommendationsResponse>(
+      `/api/users/${encodeURIComponent(idOrEmail)}/recommendations/generate${qs({ from: q.from, to: q.to })}`,
+      { method: 'POST' },
+    ),
+
   regenerateRecommendations: (idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>) =>
     request<RecommendationsResponse>(
       `/api/users/${encodeURIComponent(idOrEmail)}/recommendations/regenerate${qs({ from: q.from, to: q.to })}`,

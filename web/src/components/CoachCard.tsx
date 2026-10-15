@@ -4,8 +4,10 @@
  * /api/capabilities says which) from this person's own numbers — no scores,
  * medians or targets — plus a summary line and strengths. Renders nothing
  * at all unless the server reports the capability (a key is configured); a
- * misconfigured endpoint is shown IN the card, never hidden. Fetches its own
- * endpoint so the rest of the Personal page never waits on a model call.
+ * misconfigured endpoint is shown IN the card, never hidden. On demand only:
+ * opening the page reads the stored notes (no model call); with nothing stored
+ * for the range the card offers a "Get coaching" button, and only that click
+ * spends tokens. Fetches its own endpoint so the rest of the page never waits.
  */
 import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, RotateCw, Sparkles, ThumbsUp } from 'lucide-react';
@@ -20,7 +22,7 @@ import {
   type RecommendationArea,
   type RecommendationsResponse,
 } from '@dash/shared';
-import { useCapabilities, useRecommendations, useRegenerateRecommendations } from '@/lib/queries';
+import { useCapabilities, useGenerateRecommendations, useRecommendations, useRegenerateRecommendations } from '@/lib/queries';
 import { ApiError } from '@/lib/api';
 import { relativeDateTime } from '@/lib/format';
 import { usePersonaStore } from '@/state/persona';
@@ -57,6 +59,7 @@ export function CoachCard({
   // Short ranges say nothing about habits — no request, no model call, a quiet note instead.
   const tooShort = daysInclusive({ from, to }) < COACH_MIN_RANGE_DAYS;
   const q = useRecommendations(idOrEmail, { from, to }, enabled && !tooShort);
+  const gen = useGenerateRecommendations();
   const regen = useRegenerateRecommendations();
   const viewerEmail = usePersonaStore((s) => s.email);
   if (!enabled) return null;
@@ -66,9 +69,29 @@ export function CoachCard({
   const model = caps?.aiCoach.model ?? null;
   const isSelf = viewerEmail !== null && profileEmail !== null && viewerEmail === profileEmail;
   const firstName = userName.split(/[\s.]+/)[0] ?? userName;
-  // Endpoint/config failures and "no metrics" are rendered inside the card
-  // with a specific message; only unexpected errors fall to the generic ErrorCard.
+  // "Not generated yet", endpoint/config failures and "no metrics" are rendered
+  // inside the card; only unexpected errors fall to the generic ErrorCard.
   const coachError = q.error instanceof ApiError ? classifyCoachError(q.error) : null;
+  // The button's own state counts only for the range on screen — switching the
+  // range must not carry a spinner or a failure over from the previous one.
+  const genHere = gen.variables?.idOrEmail === idOrEmail && gen.variables.from === from && gen.variables.to === to;
+  const generating = genHere && gen.isPending;
+  const genProblem = genHere && gen.error instanceof ApiError ? classifyCoachError(gen.error) : null;
+
+  const onGenerate = () =>
+    gen.mutate(
+      { idOrEmail, from, to },
+      {
+        onError: (e) => {
+          if (e instanceof ApiError && e.status === 429) {
+            const m = /(\d+) min/.exec(e.message);
+            toast('The coach is busy', 'info', m ? `Try again in ${m[1]} min.` : 'Try again in a few minutes.');
+          } else if (!(e instanceof ApiError && classifyCoachError(e))) {
+            toast('Could not get coaching notes', 'error', e instanceof Error ? e.message : undefined);
+          }
+        },
+      },
+    );
 
   const onRegenerate = () =>
     regen.mutate(
@@ -102,22 +125,28 @@ export function CoachCard({
         error={coachError ? undefined : q.error}
         onRetry={() => void q.refetch()}
         actions={
-          <Tip content={data?.cached ? `Cached ${relativeDateTime(data.generatedAt)} — ask ${provider} again` : `Ask ${provider} again`}>
-            <span>
-              <Button variant="ghost" onClick={onRegenerate} disabled={regen.isPending || q.isLoading || tooShort} title="Regenerate">
-                <RotateCw size={13} className={cn(regen.isPending && 'animate-spin')} />
-                <span className="hidden sm:inline">Regenerate</span>
-              </Button>
-            </span>
-          </Tip>
+          data && !tooShort ? (
+            <Tip content={data.cached ? `Cached ${relativeDateTime(data.generatedAt)} — ask ${provider} again` : `Ask ${provider} again`}>
+              <span>
+                <Button variant="ghost" onClick={onRegenerate} disabled={regen.isPending || q.isLoading} title="Regenerate">
+                  <RotateCw size={13} className={cn(regen.isPending && 'animate-spin')} />
+                  <span className="hidden sm:inline">Regenerate</span>
+                </Button>
+              </span>
+            </Tip>
+          ) : undefined
         }
       >
         {tooShort ? (
           <div className="rounded-lg border border-border bg-fg/[0.03] px-3 py-3 text-xs text-muted">
             The coach needs at least {COACH_MIN_RANGE_DAYS} days to say anything about habits — pick a 7-day or longer range.
           </div>
-        ) : q.isLoading ? (
+        ) : generating ? (
           <GeneratingSkeleton />
+        ) : genProblem && genProblem !== 'not-generated' ? (
+          <CoachProblem kind={genProblem} error={gen.error as ApiError} provider={provider} model={model} onRetry={onGenerate} />
+        ) : coachError === 'not-generated' ? (
+          <CoachInvite isSelf={isSelf} firstName={firstName} provider={provider} onGenerate={onGenerate} />
         ) : coachError ? (
           <CoachProblem kind={coachError} error={q.error as ApiError} provider={provider} model={model} onRetry={() => void q.refetch()} />
         ) : data ? (
@@ -131,7 +160,8 @@ export function CoachCard({
 type CoachProblemKind = 'misconfigured' | 'upstream' | 'no-metrics' | 'too-short';
 
 /** Which in-card state an API failure maps to; null = not a coach-specific failure. */
-function classifyCoachError(err: ApiError): CoachProblemKind | null {
+function classifyCoachError(err: ApiError): CoachProblemKind | 'not-generated' | null {
+  if (err.code === 'not_generated') return 'not-generated';
   if (err.code === 'no_metrics_for_range') return 'no-metrics';
   if (err.code === 'range_too_short') return 'too-short';
   if (err.status === 503) return 'misconfigured';
@@ -182,6 +212,41 @@ function CoachProblem({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Nothing stored for this range yet: say what a click does, and that nothing runs without one. */
+function CoachInvite({
+  isSelf,
+  firstName,
+  provider,
+  onGenerate,
+}: {
+  isSelf: boolean;
+  firstName: string;
+  provider: string;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-fg/[0.03] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+          <Sparkles size={14} />
+        </span>
+        <div className="min-w-0 space-y-0.5">
+          <div className="text-[13px] font-semibold">
+            {isSelf ? 'Get feedback on how you work with Claude Code' : `Get coaching notes for ${firstName}`}
+          </div>
+          <p className="text-xs leading-relaxed text-muted">
+            {provider} reads {isSelf ? 'your' : `${firstName}'s`} numbers for this range — never prompts, code or file names — and
+            writes a short summary, strengths and 3–5 things to try. It only runs when you ask.
+          </p>
+        </div>
+      </div>
+      <Button variant="primary" onClick={onGenerate} className="shrink-0">
+        <Sparkles size={13} /> Get coaching
+      </Button>
     </div>
   );
 }
