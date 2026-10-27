@@ -118,6 +118,15 @@ export interface PluginRow {
   users: number;
 }
 
+/** One (skill, user) cell in range, with the plugin telemetry named for the skill, if any. */
+export interface PluginSkillUserRow {
+  skill_name: string;
+  meta_plugin: string | null;
+  user_id: number;
+  invocations: number;
+  cost_cents: number;
+}
+
 export interface AppVersionRow {
   app_version: string;
   users: number;
@@ -394,6 +403,36 @@ export class OtelPacksRepo {
          ORDER BY loads DESC, plugin_name`,
       )
       .all(scopeParams(from, to, scope)) as PluginRow[];
+  }
+
+  /**
+   * Skill runs per (skill, user) in range, joined to the plugin skill_activated
+   * named. Attribution to plugins (incl. the 'prefix:' fallback) happens in the
+   * route — distinct users per plugin need the user ids.
+   */
+  pluginSkillUsers(from: string, to: string, scope: OtelScope = {}): PluginSkillUserRow[] {
+    const { fromSql, whereSql } = scopeSql('otel_skill_daily', scope);
+    return this.db
+      .prepare(
+        `SELECT t.skill_name AS skill_name,
+                m.plugin_name AS meta_plugin,
+                t.user_id AS user_id,
+                COALESCE(SUM(t.invocations), 0) AS invocations,
+                COALESCE(SUM(t.cost_cents), 0)  AS cost_cents
+         FROM ${fromSql}
+         LEFT JOIN otel_skill_meta m ON m.skill_name = t.skill_name
+         WHERE ${whereSql} AND t.invocations > 0
+         GROUP BY t.skill_name, t.user_id`,
+      )
+      .all(scopeParams(from, to, scope)) as PluginSkillUserRow[];
+  }
+
+  /** Every plugin name Claude Code ever reported loading or installing (range-independent). */
+  knownPluginNames(): Set<string> {
+    const rows = this.db.prepare(`SELECT DISTINCT plugin_name FROM otel_plugin_daily`).all() as Array<{
+      plugin_name: string;
+    }>;
+    return new Set(rows.map((r) => r.plugin_name));
   }
 
   /** Latest observed Claude Code version per user, grouped (current state, no range). */

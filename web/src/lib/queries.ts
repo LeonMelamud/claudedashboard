@@ -180,6 +180,15 @@ export function useMcp(q: RangeQ & { userId?: number | undefined }, enabled = tr
   });
 }
 
+/** Telemetry pack: plugins ranked by skill runs, each with its skills. */
+export function usePlugins(q: RangeQ & { userId?: number | undefined }, enabled = true) {
+  return useQuery({
+    queryKey: packKey('telemetry-plugins', q),
+    queryFn: () => api.telemetryPlugins(q),
+    enabled,
+  });
+}
+
 /**
  * Stored AI coach notes for one person — a read that never calls the model
  * (nothing stored yet → 404 not_generated, and the card offers its button).
@@ -273,6 +282,7 @@ const DATA_KEYS = [
   'telemetry-governance',
   'telemetry-ecosystem',
   'telemetry-mcp',
+  'telemetry-plugins',
 ];
 
 export function useSyncStatus(refetchMs = 60_000) {

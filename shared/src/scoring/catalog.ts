@@ -562,6 +562,12 @@ export const METRIC_GUIDE: Record<
     formula: 'plugin install/load telemetry events',
     explanation: 'Which Claude Code plugins are installed and actually loaded across the team.',
   },
+  pluginUsage: {
+    name: 'Plugin usage',
+    formula: 'skill_activated events per plugin (sum of its skills), plus plugin load events',
+    explanation:
+      'Plugins ranked by how often people actually run their skills — loading a plugin costs nothing, using it is the signal. A skill counts toward a plugin when telemetry names the plugin, or when its "plugin:" prefix matches a plugin Claude Code reported loading.',
+  },
   versionDrift: {
     name: 'Version drift',
     formula: 'latest Claude Code version reported per machine',

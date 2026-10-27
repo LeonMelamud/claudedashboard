@@ -828,6 +828,44 @@ export interface McpResponse {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/telemetry/plugins — plugins ranked by the skill runs they brought,
+// each with its own skills. A skill belongs to a plugin when telemetry said so
+// (skill_activated plugin.name), else when its 'prefix:' is a plugin Claude Code
+// reported loading — a bare prefix is often a project folder, not a plugin.
+// ---------------------------------------------------------------------------
+
+export interface PluginSkillUsageRow {
+  /** full telemetry name, usually 'plugin:skill' */
+  skillName: string;
+  invocations: number;
+  users: number;
+  costCents: number;
+}
+
+export interface PluginUsageRow {
+  pluginName: string;
+  /** sum of its skills' invocations — the ranking metric */
+  invocations: number;
+  /** distinct people who ran at least one of its skills */
+  users: number;
+  costCents: number;
+  /** sessions that loaded the plugin (plugin_loaded), whether or not a skill ran */
+  loads: number;
+  installs: number;
+  /** distinct people who loaded it */
+  loadUsers: number;
+  /** most-invoked first */
+  skills: PluginSkillUsageRow[];
+}
+
+export interface PluginsResponse {
+  range: DateRange;
+  hasData: boolean;
+  /** most-invoked first; plugins loaded but never used come last (invocations 0) */
+  plugins: PluginUsageRow[];
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/entity — everything we know about one skill / subagent / tool /
 // MCP server / plugin: static facts, range totals, lifecycle, daily trend,
 // related entities. The people behind it come from GET /api/breakdown.

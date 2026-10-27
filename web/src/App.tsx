@@ -8,6 +8,7 @@ const OrgOverview = lazy(() => import('@/pages/OrgOverview'));
 const Insights = lazy(() => import('@/pages/Insights'));
 const OrgSkills = lazy(() => import('@/pages/OrgSkills'));
 const OrgMcp = lazy(() => import('@/pages/OrgMcp'));
+const OrgPlugins = lazy(() => import('@/pages/OrgPlugins'));
 const OrgActivity = lazy(() => import('@/pages/OrgActivity'));
 const OrgHealth = lazy(() => import('@/pages/OrgHealth'));
 const OrgCosts = lazy(() => import('@/pages/OrgCosts'));
@@ -55,6 +56,7 @@ export function App() {
         <Route path="/org/insights" element={wrap(<Insights />)} />
         <Route path="/org/skills" element={wrap(<OrgSkills />)} />
         <Route path="/org/mcp" element={wrap(<OrgMcp />)} />
+        <Route path="/org/plugins" element={wrap(<OrgPlugins />)} />
         <Route path="/org/activity" element={wrap(<OrgActivity />)} />
         <Route path="/org/health" element={wrap(<OrgHealth />)} />
         <Route path="/org/costs" element={wrap(<OrgCosts />)} />
