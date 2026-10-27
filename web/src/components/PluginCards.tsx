@@ -12,6 +12,7 @@ import { EntityName } from '@/components/EntityName';
 
 type Drill = ((t: BreakdownTarget) => void) | undefined;
 type RankMode = 'invocations' | 'cost';
+type RankedPlugin = PluginUsageRow & { rank: number };
 
 /** 'plugin:skill' → 'skill'; names without the plugin prefix stay as they are. */
 function skillLabel(skillName: string, pluginName: string): string {
@@ -103,15 +104,22 @@ export function PluginRankingCard({
 
   const q = filter.trim().toLowerCase();
   const unused = rows.filter((r) => r.invocations === 0).length;
-  const visible = useMemo(() => {
+  // rank, share and bar scale come from the whole list, so filtering never renumbers it
+  const { visible, total, max } = useMemo(() => {
     const metric = (r: PluginUsageRow) => (mode === 'cost' ? r.costCents : r.invocations);
-    return rows
-      .filter((r) => showUnused || r.invocations > 0)
-      .filter(
-        (r) =>
-          !q || r.pluginName.toLowerCase().includes(q) || r.skills.some((s) => s.skillName.toLowerCase().includes(q)),
-      )
-      .sort((a, b) => metric(b) - metric(a) || b.invocations - a.invocations || b.loads - a.loads);
+    const ranked: RankedPlugin[] = [...rows]
+      .sort((a, b) => metric(b) - metric(a) || b.invocations - a.invocations || b.loads - a.loads)
+      .map((r, i) => ({ ...r, rank: i + 1 }));
+    return {
+      visible: ranked
+        .filter((r) => showUnused || r.invocations > 0)
+        .filter(
+          (r) =>
+            !q || r.pluginName.toLowerCase().includes(q) || r.skills.some((s) => s.skillName.toLowerCase().includes(q)),
+        ),
+      total: ranked.reduce((sum, r) => sum + metric(r), 0),
+      max: ranked.reduce((m, r) => Math.max(m, metric(r)), 0),
+    };
   }, [rows, mode, q, showUnused]);
 
   const toggle = (name: string) =>
@@ -174,20 +182,34 @@ export function PluginRankingCard({
               : 'No plugin activity in this range'
       }
     >
-      <RankingTable rows={visible} mode={mode} open={open} onToggle={toggle} onDrill={onDrill} filter={q} />
+      <RankingTable
+        rows={visible}
+        total={total}
+        max={max}
+        mode={mode}
+        open={open}
+        onToggle={toggle}
+        onDrill={onDrill}
+        filter={q}
+      />
     </ChartCard>
   );
 }
 
 function RankingTable({
   rows,
+  total,
+  max,
   mode,
   open,
   onToggle,
   onDrill,
   filter,
 }: {
-  rows: PluginUsageRow[];
+  rows: RankedPlugin[];
+  /** whole-list sum and top value, so share and bars don't change under the filter */
+  total: number;
+  max: number;
   mode: RankMode;
   open: Set<string>;
   onToggle: (name: string) => void;
@@ -196,8 +218,6 @@ function RankingTable({
 }) {
   const metric = (r: { invocations: number; costCents: number }) => (mode === 'cost' ? r.costCents : r.invocations);
   const fmtVal = mode === 'cost' ? fmtCost : fmtNumber;
-  const max = rows.reduce((m, r) => Math.max(m, metric(r)), 0);
-  const total = rows.reduce((s, r) => s + metric(r), 0);
   const headers = ['#', 'Plugin', mode === 'cost' ? 'Cost' : 'Runs', 'Share', 'Users', 'Skills', mode === 'cost' ? 'Runs' : 'Cost', 'Loads'];
   return (
     <div className="overflow-x-auto">
@@ -218,7 +238,7 @@ function RankingTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((p, idx) => {
+          {rows.map((p) => {
             const isOpen = open.has(p.pluginName) || (!!filter && !p.pluginName.toLowerCase().includes(filter));
             const value = metric(p);
             return (
@@ -227,7 +247,7 @@ function RankingTable({
                   className="cursor-pointer border-b border-border/60 transition-colors hover:bg-fg/[0.025]"
                   onClick={() => onToggle(p.pluginName)}
                 >
-                  <td className="w-8 px-2.5 py-1.5 text-xs text-muted">{idx + 1}</td>
+                  <td className="w-8 px-2.5 py-1.5 text-xs text-muted">{p.rank}</td>
                   <td className="px-2.5 py-1.5">
                     <span className="flex items-center gap-2">
                       <button
