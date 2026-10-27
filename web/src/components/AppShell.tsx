@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Puzzle,
   RefreshCw,
   Search,
   Settings,
@@ -59,6 +60,7 @@ function mainNav(caps: { invoiceCosts: boolean; telemetryPacks: boolean } | unde
   if (caps?.telemetryPacks !== false) {
     items.push(
       { to: '/org/mcp', label: 'MCP', icon: <Plug size={17} /> },
+      { to: '/org/plugins', label: 'Plugins', icon: <Puzzle size={17} /> },
       { to: '/org/activity', label: 'Activity', icon: <Timer size={17} /> },
       { to: '/org/health', label: 'Health', icon: <HeartPulse size={17} /> },
     );

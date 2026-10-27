@@ -13,6 +13,7 @@ import {
   User,
   Users,
   Plug,
+  Puzzle,
   Wrench,
 } from 'lucide-react';
 import { useCapabilities, useTeams, useUsers } from '@/lib/queries';
@@ -36,6 +37,7 @@ const PAGES: PaletteItem[] = [
   { id: 'p-insights', group: 'Pages', label: 'Insights', to: '/org/insights', icon: <Lightbulb size={14} /> },
   { id: 'p-skills', group: 'Pages', label: 'Skills & Agents', to: '/org/skills', icon: <Sparkles size={14} /> },
   { id: 'p-mcp', group: 'Pages', label: 'MCP', to: '/org/mcp', icon: <Plug size={14} />, requires: 'telemetryPacks' },
+  { id: 'p-plugins', group: 'Pages', label: 'Plugins', to: '/org/plugins', icon: <Puzzle size={14} />, requires: 'telemetryPacks' },
   { id: 'p-activity', group: 'Pages', label: 'Activity', to: '/org/activity', icon: <Timer size={14} />, requires: 'telemetryPacks' },
   { id: 'p-health', group: 'Pages', label: 'Health', to: '/org/health', icon: <HeartPulse size={14} />, requires: 'telemetryPacks' },
   { id: 'p-teams', group: 'Pages', label: 'Teams', to: '/teams', icon: <Users size={14} /> },

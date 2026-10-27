@@ -20,6 +20,7 @@ import type {
   InsightsResponse,
   LeaderboardResponse,
   McpResponse,
+  PluginsResponse,
   OverviewResponse,
   RecommendationsResponse,
   ReliabilityResponse,
@@ -250,6 +251,12 @@ export const api = {
   telemetryMcp: (q: RangeQ & { userId?: number | undefined }) =>
     request<McpResponse>(
       `/api/telemetry/mcp${qs({ from: q.from, to: q.to, teamId: q.teamId, userId: q.userId })}`,
+    ),
+
+  /** telemetry packs — plugins ranked by their skills' runs, with per-skill breakdown */
+  telemetryPlugins: (q: RangeQ & { userId?: number | undefined }) =>
+    request<PluginsResponse>(
+      `/api/telemetry/plugins${qs({ from: q.from, to: q.to, teamId: q.teamId, userId: q.userId })}`,
     ),
 
   syncStatus: () => request<SyncStatusResponse>('/api/sync/status'),
